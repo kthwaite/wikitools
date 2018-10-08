@@ -1,0 +1,7 @@
+[package]
+name = "wikitools"
+version = "0.0.0"
+authors = ["cthwaite"]
+
+[dependencies]
+regex = "1.0"
