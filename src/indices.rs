@@ -109,7 +109,7 @@ pub fn write_template_indices(index: &Path, output: &Path) {
 }
 
 /// Fetch and write all indices.
-pub fn write_all_indices(index: &Path, out_path: &str) {
+pub fn write_all_indices(index: &Path, out_path: &Path) {
     let hx = build_indices_map(index).unwrap();
     write_indices(&hx, out_path).unwrap();
 }
