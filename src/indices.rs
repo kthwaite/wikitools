@@ -8,9 +8,10 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use spinners::{Spinner, Spinners};
 use pbr::ProgressBar;
 
+pub type WikiDumpIndices = HashMap<usize, Vec<usize>>;
 
 /// Find template indices in an index file.
-pub fn find_template_indices(path: &Path) -> io::Result<HashMap<usize, Vec<usize>>> {
+pub fn find_template_indices(path: &Path) -> io::Result<WikiDumpIndices> {
     let buf = open_bzip(path)?;
 
     let mut hm : HashMap<usize, Vec<usize>> = HashMap::default();
@@ -35,10 +36,10 @@ pub fn find_template_indices(path: &Path) -> io::Result<HashMap<usize, Vec<usize
 }
 
 /// Build a lookup table of all indices.
-pub fn build_indices_map(path: &Path) -> io::Result<HashMap<usize, Vec<usize>>> {
+pub fn build_indices_map(path: &Path) -> io::Result<WikiDumpIndices> {
     let indices = open_bzip(path)?;
 
-    let hm : HashMap<usize, Vec<usize>> = HashMap::default();
+    let hm : WikiDumpIndices = HashMap::default();
 
     let mut counter = 0;
 
@@ -66,30 +67,27 @@ pub fn build_indices_map(path: &Path) -> io::Result<HashMap<usize, Vec<usize>>> 
 }
 
 /// Read an indices file.
-pub fn read_indices(path: &Path) -> io::Result<HashMap<usize, Vec<usize>>> {
+pub fn read_indices(path: &Path) -> io::Result<WikiDumpIndices> {
     let file = File::open(path)?;
     let buf = BufReader::new(file);
     let hm : HashMap<usize, Vec<usize>> = HashMap::default();
     let hm = buf.lines()
        .map(|line| line.unwrap())
        .map(|line| {
-            let pair : Vec<&str> = line.split(':').take(2).collect();
-            let outer = pair[0].parse::<usize>().unwrap();
-            let inner = pair[1].parse::<usize>().unwrap();
-
+                let pair : Vec<&str> = line.split(' ').take(2).collect();
+                let outer = pair[0].parse::<usize>().unwrap();
+                let inner = pair[1].split(',').map(|num| num.parse::<usize>().unwrap()).collect::<Vec<_>>();
                 (outer, inner)
            })
            .fold(hm, |mut hm, (o, i)| {
-                hm.entry(o)
-                  .or_insert(Vec::new())
-                  .push(i);
+                hm.insert(o, i);
                 hm
            });
     Ok(hm)
 }
 
 /// Write a HashMap of indices to file.
-pub fn write_indices(hs: &HashMap<usize, Vec<usize>>, path: &Path) -> io::Result<()> {
+pub fn write_indices(hs: &WikiDumpIndices, path: &Path) -> io::Result<()> {
     let out = File::create(path)?;
     let mut buf = BufWriter::with_capacity(8192 * 4, out);
     for (outer, inners) in hs.iter() {
@@ -103,13 +101,15 @@ pub fn write_indices(hs: &HashMap<usize, Vec<usize>>, path: &Path) -> io::Result
 }
 
 /// Fetch and write the indices of each Template.
-pub fn write_template_indices(index: &Path, output: &Path) {
+pub fn write_template_indices(index: &Path, output: &Path) -> WikiDumpIndices {
     let hx = find_template_indices(index).unwrap();
     write_indices(&hx, output).unwrap();
+    hx
 }
 
 /// Fetch and write all indices.
-pub fn write_all_indices(index: &Path, out_path: &Path) {
+pub fn write_all_indices(index: &Path, out_path: &Path) -> WikiDumpIndices {
     let hx = build_indices_map(index).unwrap();
     write_indices(&hx, out_path).unwrap();
+    hx
 }
