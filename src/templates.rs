@@ -64,12 +64,29 @@ impl FileTemplateWriter {
             writer: Mutex::new(buf)
         }
     }
-
 }
+
 impl TemplateWriter for FileTemplateWriter {
     fn write_template_impl(&self, template: Template) {
         let mut output = self.writer.lock().unwrap();
-        write!(&mut output, "{}", template);
+        writeln!(&mut output, "{}", template);
+    }
+}
+
+use std::io::Stdout;
+
+pub struct StdOutTemplateWriter(Stdout);
+
+impl StdOutTemplateWriter {
+    pub fn new() -> Self {
+        StdOutTemplateWriter(io::stdout())
+    }
+}
+
+impl TemplateWriter for StdOutTemplateWriter {
+    fn write_template_impl(&self, template: Template) {
+        let mut output = self.0.lock();
+        write!(&mut output, "{}", template).unwrap();
     }
 }
 
