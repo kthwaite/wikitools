@@ -28,7 +28,7 @@ pub fn find_template_indices(path: &Path) -> io::Result<WikiDumpIndices> {
         let outer = pair[0].parse::<usize>().unwrap();
         let inner = pair[1].parse::<usize>().unwrap();
         hm.entry(outer)
-          .or_insert(Vec::new())
+          .or_insert_with(Vec::new)
           .push(inner);
         pbar.inc();
     }
@@ -59,7 +59,7 @@ pub fn build_indices_map(path: &Path) -> io::Result<WikiDumpIndices> {
            })
            .fold(hm, |mut hm, (o, i)| {
                 hm.entry(o)
-                  .or_insert(Vec::new())
+                  .or_insert_with(Vec::new)
                   .push(i);
                 hm
            });
