@@ -4,4 +4,10 @@ version = "0.0.0"
 authors = ["cthwaite"]
 
 [dependencies]
+bzip2 = "0.3.1"
 regex = "1.0"
+zip = "0.4.2"
+rayon = "1.0"
+pbr = "1.0"
+spinners = "1.0"
+lazy_static = "1.1"
