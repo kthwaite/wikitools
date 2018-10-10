@@ -138,8 +138,8 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
 }
 
 
-pub fn compile_templates(indices: WikiDumpIndices, data: &Path, output_path: &Path) {
-    let mut idx = indices.keys().into_iter().cloned().collect::<Vec<_>>();
+pub fn compile_templates(indices: &WikiDumpIndices, data: &Path, output_path: &Path) {
+    let mut idx = indices.keys().cloned().collect::<Vec<_>>();
     idx.sort();
     let pbar = Mutex::new(ProgressBar::new(idx.len() as u64));
     let out_file = File::create(output_path).unwrap();
@@ -155,4 +155,3 @@ pub fn compile_templates(indices: WikiDumpIndices, data: &Path, output_path: &Pa
             }
         });
 }
-

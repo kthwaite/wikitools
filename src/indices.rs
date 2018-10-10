@@ -52,7 +52,7 @@ pub fn build_indices_map(path: &Path) -> io::Result<WikiDumpIndices> {
                 let outer = pair[0].parse::<usize>().unwrap();
                 let inner = pair[1].parse::<usize>().unwrap();
                 counter += 1;
-                if counter % 100000 == 0 {
+                if counter % 100_000 == 0 {
                     println!("Read {} lines", counter);
                 }
                 (outer, inner)
@@ -95,7 +95,7 @@ pub fn write_indices(hs: &WikiDumpIndices, path: &Path) -> io::Result<()> {
         inners[0..inners.len() - 1].iter().for_each(|inner| {
             write!(&mut buf, "{},", inner);
         });
-        write!(&mut buf, "{}\n", inners.last().unwrap());
+        writeln!(&mut buf, "{}", inners.last().unwrap());
     }
     Ok(())
 }

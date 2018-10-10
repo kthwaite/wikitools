@@ -10,7 +10,7 @@ use std::io::{self, BufRead, SeekFrom, BufReader, prelude::*};
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 
 pub fn to_decode_buffer(file: File) -> BZipReader {
-    let buf = BufReader::with_capacity(8192 * 8, file);
+    let buf = BufReader::with_capacity(8192 * 4, file);
     let dec = BzDecoder::new(buf);
     BufReader::with_capacity(8192 * 16, dec)
 }
@@ -45,9 +45,9 @@ impl<'a, B: BufRead> Iterator for LineView<'a, B> {
         match self.buf.read_line(&mut line) {
             Ok(0) => None,
             Ok(_) => {
-                if line.ends_with("\n") {
+                if line.ends_with('\n') {
                     line.pop();
-                    if line.ends_with("\r") {
+                    if line.ends_with('\r') {
                         line.pop();
                     }
                 }
@@ -111,7 +111,7 @@ impl<R: BufRead> Read for BzDecoderMulti<R> {
                 self.done = true;
                 return Ok(read)
             }
-            if read > 0 || self.is_eof || buf.len() == 0 {
+            if read > 0 || self.is_eof || buf.is_empty() {
                 return Ok(read)
             }
         }
