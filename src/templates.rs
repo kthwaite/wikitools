@@ -80,7 +80,7 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
     let mut reader = qx::Reader::from_reader(stream);
 
     let mut buf = Vec::new();
-    let mut text = String::new();
+    let mut page = String::new();
     let mut title = String::new();
 
     let mut in_page = false;
@@ -90,50 +90,46 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
 
     loop {
         match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                match e.name() {
-                   b"page" => {
-                       in_page = true;
-                   },
+            Ok(Event::Start(ref tag)) => {
+                match tag.name() {
+                   b"page" => in_page = true,
                    b"title" => {
-                       in_title = true;
+                       if in_page {
+                           in_title = true;
+                       }
                    },
-                   b"text" => {
-                       in_text = true;
-                   },
+                   b"text" => in_text = true,
                    _ => ()
                 }
             },
-            Ok(Event::End(ref e)) => {
-                match e.name() {
+            Ok(Event::End(ref tag)) => {
+                match tag.name() {
                    b"page" => {
                        in_page = false;
                        if in_template {
-                           writer.write_template(title, text);
+                           writer.write_template(title, page);
                            title = String::new();
-                           text = String::new();
+                           page = String::new();
                        }
                        in_template = false;
                    },
-                   b"text" => {
-                       in_text = false;
-                   },
+                   b"text" => in_text = false,
                    _ => (),
                 }
             },
-            Ok(Event::Eof) => break,
-            Ok(Event::Text(e)) => {
+            Ok(Event::Text(text)) => {
                 if in_title {
-                    title = e.unescape_and_decode(&reader).expect("Error!");
+                    title = text.unescape_and_decode(&reader).expect("Error!");
                     if title.starts_with("Template:") {
                         in_template = true;
                     }
                     in_title = false;
                 }
                 if in_template && in_text {
-                    text = e.unescape_and_decode(&reader).expect("Error!");
+                    page = text.unescape_and_decode(&reader).expect("Error!");
                 }
             }
+            Ok(Event::Eof) => break,
             Ok(_) => (),
             Err(_) => break,
         }
