@@ -12,6 +12,7 @@ use utils::open_seek_bzip;
 use indices::WikiDumpIndices;
 
 
+/// Wikipedia Template data.
 #[derive(Clone, Debug, Default)]
 pub struct Template {
     title: String,
@@ -51,6 +52,8 @@ pub trait TemplateWriter {
     fn write_template_impl(&self, template: Template);
 }
 
+
+/// Thread-safe Template writer for writing to (uncompressed) file.
 pub struct FileTemplateWriter {
     writer: Mutex<io::BufWriter<File>>
 }
@@ -58,6 +61,7 @@ pub struct FileTemplateWriter {
 static FTW_CAP : usize = 8192 * 1024;
 
 impl FileTemplateWriter {
+    /// Create a new FileTemplateWriter from a File handle.
     pub fn new(file: File) -> Self {
         let buf = BufWriter::with_capacity(FTW_CAP, file);
         FileTemplateWriter {
@@ -67,6 +71,7 @@ impl FileTemplateWriter {
 }
 
 impl TemplateWriter for FileTemplateWriter {
+    /// Write a Template to the wrapped File.
     fn write_template_impl(&self, template: Template) {
         let mut output = self.writer.lock().unwrap();
         writeln!(&mut output, "{}", template);
@@ -76,6 +81,7 @@ impl TemplateWriter for FileTemplateWriter {
 
 pub struct StdoutTemplateWriter(Stdout);
 
+/// Thread-safe Template writer for writing to stdout.
 impl StdoutTemplateWriter {
     pub fn new() -> Self {
         StdoutTemplateWriter(io::stdout())
@@ -83,6 +89,7 @@ impl StdoutTemplateWriter {
 }
 
 impl TemplateWriter for StdoutTemplateWriter {
+    /// Write template to stdout.
     fn write_template_impl(&self, template: Template) {
         let mut output = self.0.lock();
         write!(&mut output, "{}", template).unwrap();
@@ -90,6 +97,7 @@ impl TemplateWriter for StdoutTemplateWriter {
 }
 
 
+/// Extract templates from a stream and pass them to a TemplateWriter.
 pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
     use self::qx::events::Event;
 
@@ -124,17 +132,14 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
                 }
             },
             Ok(Event::End(ref tag)) => {
-                match tag.name() {
-                   b"page" => {
-                       in_page = false;
-                       if in_template {
-                           writer.write_template(title, page);
-                           title = String::new();
-                           page = String::new();
-                       }
-                       in_template = false;
-                   },
-                   _ => (),
+                if let b"page" = tag.name() {
+                   in_page = false;
+                   if in_template {
+                       writer.write_template(title, page);
+                       title = String::new();
+                       page = String::new();
+                   }
+                   in_template = false;
                 }
             },
             Ok(Event::Eof) => break,
@@ -145,7 +150,20 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
     }
 }
 
-
+/// Fetch templates from a Wikipedia dump, writing them to file.
+///
+/// After extracting the indices of template pages from an index file, pass the
+/// indices to this function along with the path to a Wikipedia dump
+/// multistream, and template pages will be written to an uncompressed
+/// psuedo-XML file.
+///
+/// # Arguments
+///
+/// * `indices` - WikiDumpIndices indicating the offsets within the data file
+///     for bundles containing template pages.
+/// * `data` - Path to the Wikipedia dump multistream bz2.
+/// * `output_path` - Output path to write the templates file to.
+///
 pub fn compile_templates(indices: &WikiDumpIndices, data: &Path, output_path: &Path) {
     let mut idx = indices.keys().cloned().collect::<Vec<_>>();
     idx.sort();
