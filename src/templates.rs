@@ -1,6 +1,6 @@
 use std::fmt::{self};
 use std::fs::File;
-use std::io::{self, BufRead, BufWriter, Write};
+use std::io::{self, BufRead, Stdout, BufWriter, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -73,17 +73,16 @@ impl TemplateWriter for FileTemplateWriter {
     }
 }
 
-use std::io::Stdout;
 
-pub struct StdOutTemplateWriter(Stdout);
+pub struct StdoutTemplateWriter(Stdout);
 
-impl StdOutTemplateWriter {
+impl StdoutTemplateWriter {
     pub fn new() -> Self {
-        StdOutTemplateWriter(io::stdout())
+        StdoutTemplateWriter(io::stdout())
     }
 }
 
-impl TemplateWriter for StdOutTemplateWriter {
+impl TemplateWriter for StdoutTemplateWriter {
     fn write_template_impl(&self, template: Template) {
         let mut output = self.0.lock();
         write!(&mut output, "{}", template).unwrap();
@@ -96,14 +95,12 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
 
     let mut reader = qx::Reader::from_reader(stream);
 
-    let mut buf = Vec::new();
+    let (mut buf, mut text_buf) = (Vec::new(), Vec::new());
     let mut page = String::new();
     let mut title = String::new();
 
     let mut in_page = false;
     let mut in_template = false;
-    let mut in_title = false;
-    let mut in_text = false;
 
     loop {
         match reader.read_event(&mut buf) {
@@ -112,10 +109,17 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
                    b"page" => in_page = true,
                    b"title" => {
                        if in_page {
-                           in_title = true;
+                            title = reader.read_text(b"title", &mut text_buf).unwrap();
+                            if title.starts_with("Template:") {
+                                in_template = true;
+                            }
                        }
                    },
-                   b"text" => in_text = true,
+                   b"text" => {
+                        if in_template {
+                            page = reader.read_text(b"text", &mut text_buf).unwrap();
+                        }
+                    }
                    _ => ()
                 }
             },
@@ -130,22 +134,9 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
                        }
                        in_template = false;
                    },
-                   b"text" => in_text = false,
                    _ => (),
                 }
             },
-            Ok(Event::Text(text)) => {
-                if in_title {
-                    title = text.unescape_and_decode(&reader).expect("Error!");
-                    if title.starts_with("Template:") {
-                        in_template = true;
-                    }
-                    in_title = false;
-                }
-                if in_template && in_text {
-                    page = text.unescape_and_decode(&reader).expect("Error!");
-                }
-            }
             Ok(Event::Eof) => break,
             Ok(_) => (),
             Err(_) => break,
@@ -171,4 +162,57 @@ pub fn compile_templates(indices: &WikiDumpIndices, data: &Path, output_path: &P
                 prog.inc();
             }
         });
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::cell::RefCell;
+    use std::io::Cursor;
+
+    #[derive(Clone, Debug, Default)]
+    struct TestTemplateWriter {
+        pub templates: RefCell<Vec<Template>>
+    }
+
+    impl TemplateWriter for TestTemplateWriter {
+        fn write_template_impl(&self, template: Template) {
+            self.templates.borrow_mut().push(template);
+        }
+    }
+
+
+    #[test]
+    fn test_extraction() {
+        let test_xml = r#"
+        <page>
+            <title>Not a Test Template</title>
+            <text>Invalid text</text>
+        </page>
+        <page>
+            <title>Template:Test Template</title>
+            <text>Valid text</text>
+        </page>
+        <page>
+            <title>Template Test</title>
+            <text>Invalid text</text>
+        </page>
+        <page>
+            <title>Template:Second Template</title>
+            <text>Another set of text</text>
+        </page>
+        "#;
+        let reader = Cursor::new(test_xml);
+        let tw = TestTemplateWriter::default();
+        extract_templates(reader, &tw);
+        let templates = tw.templates.into_inner();
+        assert_eq!(templates.len(), 2);
+        let template = &templates[0];
+        assert_eq!(template.title, "Template:Test Template");
+        assert_eq!(template.page, "Valid text");
+        let template = &templates[1];
+        assert_eq!(template.title, "Template:Second Template");
+        assert_eq!(template.page, "Another set of text");
+    }
 }
