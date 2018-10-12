@@ -1,7 +1,8 @@
 use std::fs::File;
-use std::io::{self, prelude::*};
+use std::io::{self, BufRead, BufWriter, Write};
 use std::path::Path;
 use std::str;
+use std::sync::Mutex;
 
 use pbr;
 use quick_xml::{self as qx, events::Event};
@@ -21,10 +22,8 @@ fn is_valid_alias(title: &str) -> bool {
     true
 }
 
-use std::sync::Mutex;
-use std::io::BufWriter;
 
-pub fn extract_xml<R: BufRead, W: Write>(reader: R, writer: &Mutex<BufWriter<W>>) -> io::Result<(usize, usize)> {
+fn extract_xml<R: BufRead, W: Write>(reader: R, writer: &Mutex<BufWriter<W>>) -> io::Result<(usize, usize)> {
     let mut invalid_count = 0;
     let mut count = 0;
 
