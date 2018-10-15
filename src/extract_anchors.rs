@@ -1,19 +1,30 @@
 use quick_xml::{
     self as qx,
-    events::{Event, BytesStart}
+    events::{Event}
 };
 use regex::Regex;
 use std::io::{BufReader, Read};
 
+
+
+lazy_static! {
+    /// Check if a wikipedia anchor links to an external resource.
+    static ref EXT_LINK : Regex = Regex::new("^[A-Za-z]+:").unwrap();
+}
+
+/// Wikipedia category label.
 #[derive(Debug, Clone)]
-pub struct Category(String);
+pub struct Category(pub String);
 
 impl Category {
+    /// Get the fully qualified name of a category.
     pub fn fqn(&self) -> String {
         format!("Category:{}", self.0)
     }
 }
 
+/// Wikipedia anchor, representing a link between pages, optionally with a
+/// surface realisation.
 #[derive(Debug, Clone)]
 pub enum Anchor {
     Direct(String),
@@ -40,6 +51,8 @@ impl Anchor {
         }
     }
 
+    /// Extract the text of an anchor, given a start index within a string
+    /// slice.
     pub fn pare_anchor_match(page: &str, begin: usize) -> Option<&str> {
         let initial = &page[begin + 2..];
         if EXT_LINK.is_match(initial) {
@@ -76,19 +89,18 @@ impl Anchor {
     }
 }
 
+/// Collection of Anchors and Categories for a Wikipedia page.
 #[derive(Debug, Default, Clone)]
 pub struct Page {
-    title: String,
-    anchors: Vec<Anchor>,
-    categories: Vec<Category>
-}
-
-lazy_static! {
-    static ref EXT_LINK : Regex = Regex::new("^[A-Za-z]+:").unwrap();
+    pub title: String,
+    pub anchors: Vec<Anchor>,
+    pub categories: Vec<Category>
 }
 
 impl Page {
-    fn new(title: String, page: String) -> Self {
+    /// Create a new Page object, extracting links and categories from the text
+    /// of the page.
+    pub fn new(title: String, page: String) -> Self {
         Page {
             title,
             anchors: Page::extract_anchors(&page),
@@ -96,6 +108,8 @@ impl Page {
         }
     }
 
+    /// Extract category links from the text of a Wikipedia page, returning a
+    /// Vec of Category objects.
     pub fn extract_categories(page: &str) -> Vec<Category> {
         let page = match page.rfind("==References==") {
             Some(index) => &page[index..],
@@ -106,7 +120,10 @@ impl Page {
                 let initial = &page[begin + 2..];
                 if initial.starts_with("Category:") {
                     return initial.find("]]").and_then(|end| {
-                        Some(&initial[9..end])
+                        match initial[..end].find("|") {
+                            Some(actual_end) => Some(&initial[9..actual_end]),
+                            None => Some(&initial[9..end])
+                        }
                     })
                 }
                 None
@@ -114,7 +131,8 @@ impl Page {
             .map(|cat| Category(cat.to_owned()))
             .collect::<Vec<_>>()
     }
-
+    /// Extract links from the text of a Wikipedia page, returning a Vec of
+    /// Anchor objects.
     pub fn extract_anchors(page: &str) -> Vec<Anchor> {
         let page = match page.rfind("==References==") {
             Some(index) => &page[..index],
