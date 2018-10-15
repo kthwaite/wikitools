@@ -5,7 +5,14 @@ use quick_xml::{
 use regex::Regex;
 use std::io::{BufReader, Read};
 
+#[derive(Debug, Clone)]
 pub struct Category(String);
+
+impl Category {
+    pub fn fqn(&self) -> String {
+        format!("Category:{}", self.0)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Anchor {
@@ -31,6 +38,16 @@ impl Anchor {
             },
             None => Anchor::Direct(anchor.to_owned())
         }
+    }
+
+    pub fn pare_anchor_match(page: &str, begin: usize) -> Option<&str> {
+        let initial = &page[begin + 2..];
+        if EXT_LINK.is_match(initial) {
+            return None;
+        }
+        page[begin..].find("]]").and_then(|end| {
+            Some(&page[begin + 2..begin + end])
+        })
     }
 
     /// Check if an anchor string points to a file.
@@ -62,7 +79,8 @@ impl Anchor {
 #[derive(Debug, Default, Clone)]
 pub struct Page {
     title: String,
-    anchors: Vec<Anchor>
+    anchors: Vec<Anchor>,
+    categories: Vec<Category>
 }
 
 lazy_static! {
@@ -73,7 +91,8 @@ impl Page {
     fn new(title: String, page: String) -> Self {
         Page {
             title,
-            anchors: Page::extract_anchors(&page)
+            anchors: Page::extract_anchors(&page),
+            categories: Page::extract_categories(&page)
         }
     }
 
@@ -87,7 +106,7 @@ impl Page {
                 let initial = &page[begin + 2..];
                 if initial.starts_with("Category:") {
                     return initial.find("]]").and_then(|end| {
-                        Some(&initial[..begin + end])
+                        Some(&initial[9..end])
                     })
                 }
                 None
@@ -102,15 +121,7 @@ impl Page {
             None => page
         };
         page.match_indices("[[")
-            .filter_map(|(begin, _)| {
-                let initial = &page[begin + 2..];
-                if EXT_LINK.is_match(initial) {
-                    return None;
-                }
-                page[begin..].find("]]").and_then(|end| {
-                    Some(&page[begin + 2..begin + end])
-                })
-            })
+            .filter_map(|(begin, _)| Anchor::pare_anchor_match(page, begin))
             .map(Anchor::parse)
             .collect::<Vec<_>>()
     }
