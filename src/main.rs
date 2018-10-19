@@ -33,15 +33,20 @@ use settings::Settings;
 fn main() {
     let settings = Settings::new("config.toml").unwrap();
 
-    println!("data: {:?}", settings.data);
-    println!("indices: {:?}", settings.indices);
+    println!("settings: {:#?}", settings);
 
     let (data, indices) = (&settings.data, &settings.indices);
 
     if !indices.pages.exists() {
         write_all_indices(&data.index, &indices.pages);
     }
+
     if !indices.templates.exists() {
         write_template_indices(&data.index, &indices.templates);
     }
+
+    if !settings.templates.exists() {
+        let template_indices = read_indices(&indices.templates).unwrap();
+        compile_templates(&template_indices, &data.dump, &settings.templates);
+    };
 }
