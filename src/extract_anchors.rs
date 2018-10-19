@@ -1,10 +1,18 @@
+use std::io::{BufReader, Read, Write};
+use std::path::Path;
+use std::sync::Mutex;
+
+use pbr;
 use quick_xml::{
     self as qx,
     events::{Event}
 };
+use rayon::prelude::*;
 use regex::Regex;
-use std::io::{BufReader, Read};
 
+
+use indices::read_indices;
+use utils::open_seek_bzip;
 
 
 lazy_static! {
@@ -93,6 +101,7 @@ impl Anchor {
 #[derive(Debug, Default, Clone)]
 pub struct Page {
     pub title: String,
+    pub id: String,
     pub anchors: Vec<Anchor>,
     pub categories: Vec<Category>
 }
@@ -100,9 +109,10 @@ pub struct Page {
 impl Page {
     /// Create a new Page object, extracting links and categories from the text
     /// of the page.
-    pub fn new(title: String, page: String) -> Self {
+    pub fn new(title: String, id: String, page: String) -> Self {
         Page {
             title,
+            id,
             anchors: Page::extract_anchors(&page),
             categories: Page::extract_categories(&page)
         }
@@ -146,35 +156,42 @@ impl Page {
 }
 
 /// Iterator yielding Page objects for an XML file.
-pub struct PageAnchorIterator<R: Read> {
+pub struct PageIterator<R: Read> {
     reader: qx::Reader<BufReader<R>>,
     buf: Vec<u8>,
     page_buf: Vec<u8>,
     title: String,
+    id: String,
 }
 
 
-impl<R: Read> PageAnchorIterator<R> {
+impl<R: Read> PageIterator<R> {
     pub fn new(xml_stream: BufReader<R>) -> Self {
-        PageAnchorIterator {
+        PageIterator {
             reader: qx::Reader::from_reader(xml_stream),
             buf: vec![],
             page_buf: vec![],
-            title: String::new()
+            title: String::new(),
+            id: String::new()
         }
     }
 
     fn extract_title(&mut self) {
         self.title = self.reader.read_text(b"title", &mut self.page_buf).unwrap();
     }
+
+    fn extract_id(&mut self) {
+        self.id = self.reader.read_text(b"id", &mut self.page_buf).unwrap();
+    }
 }
 
 
-impl<R: Read> Iterator for PageAnchorIterator<R> {
+impl<R: Read> Iterator for PageIterator<R> {
     type Item = Page;
 
     fn next(&mut self) -> Option<Self::Item> {
         enum Tag {
+            Id,
             Text,
             Title,
             None
@@ -185,6 +202,7 @@ impl<R: Read> Iterator for PageAnchorIterator<R> {
                     Ok(Event::Start(ref tag)) => {
                         match tag.name() {
                             b"text" => Tag::Text,
+                            b"id" => Tag::Id,
                             b"title" => Tag::Title,
                             _ => Tag::None
                         }
@@ -195,10 +213,17 @@ impl<R: Read> Iterator for PageAnchorIterator<R> {
                 }
             };
             match action {
+                Tag::Id => self.extract_id(),
                 Tag::Title => self.extract_title(),
                 Tag::Text => {
                     match self.reader.read_text(b"text", &mut self.page_buf) {
-                        Ok(page) => return Some(Page::new(self.title.clone(), page)),
+                        Ok(page) => {
+                            // Skip over redirects; these are handled separately.
+                            if page.starts_with("#redirect") {
+                                continue;
+                            }
+                            return Some(Page::new(self.title.clone(), self.id.clone(), page))
+                        },
                         Err(_) => return None,
                     }
                 }
@@ -207,4 +232,40 @@ impl<R: Read> Iterator for PageAnchorIterator<R> {
         }
         None
     }
+}
+
+pub fn extract_anchors<W: Write + Send + Sync>(path: &Path, data: &Path, writer: & Mutex<W>) {
+    let indices = read_indices(path).expect("Not a valid indices file!");
+    let mut indices = indices.keys().collect::<Vec<_>>();
+    let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
+    indices.sort();
+
+
+    use extract_anchors::Anchor;
+    indices.into_par_iter()
+           .take(1000)
+           .for_each(|index| {
+                let store = open_seek_bzip(&data, *index).unwrap();
+                let pages = PageIterator::new(store).collect::<Vec<_>>();
+                {
+                    let mut w = writer.lock().unwrap();
+                    pages.into_iter().for_each(|item| {
+                        for anchor in item.anchors {
+                            match anchor {
+                                Anchor::Direct(name) => {
+                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, name, name).unwrap()
+
+                                },
+                                Anchor::Label{ surface, page } => {
+                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, surface, page).unwrap()
+                                }
+                            }
+                        }
+                    });
+                }
+                {
+                    let mut bar = pbar.lock().unwrap();
+                    bar.inc();
+                }
+            })
 }
