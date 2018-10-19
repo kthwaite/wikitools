@@ -18,17 +18,12 @@ mod settings;
 mod templates;
 mod utils;
 
-use std::collections::HashMap;
-use std::io::{BufRead, BufWriter, Write};
-use std::path::{Path};
+use std::path::Path;
 
-
+use extract_anchors::write_anchors;
 use indices::{read_indices, write_all_indices, write_template_indices};
-use templates::compile_templates;
-use utils::{open_seek_bzip};
-
-
 use settings::Settings;
+use templates::compile_templates;
 
 fn main() {
     let settings = Settings::new("config.toml").unwrap();
@@ -37,9 +32,12 @@ fn main() {
 
     let (data, indices) = (&settings.data, &settings.indices);
 
-    if !indices.pages.exists() {
-        write_all_indices(&data.index, &indices.pages);
-    }
+    let page_indices = {
+        if !indices.pages.exists() {
+            write_all_indices(&data.index, &indices.pages);
+        }
+        read_indices(&indices.pages).unwrap()
+    };
 
     if !indices.templates.exists() {
         write_template_indices(&data.index, &indices.templates);
@@ -49,4 +47,7 @@ fn main() {
         let template_indices = read_indices(&indices.templates).unwrap();
         compile_templates(&template_indices, &data.dump, &settings.templates);
     };
+
+    let out_path = Path::new("/ebs_large/stores/wikidata/anchors.tsv");
+    write_anchors(&page_indices, &data.dump, &out_path);
 }

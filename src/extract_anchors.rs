@@ -1,7 +1,9 @@
-use std::io::{BufReader, Read, Write};
+use std::fs::File;
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
+use indices::WikiDumpIndices;
 use pbr;
 use quick_xml::{
     self as qx,
@@ -10,8 +12,6 @@ use quick_xml::{
 use rayon::prelude::*;
 use regex::Regex;
 
-
-use indices::read_indices;
 use utils::open_seek_bzip;
 
 
@@ -217,9 +217,14 @@ impl<R: Read> Iterator for PageIterator<R> {
                 Tag::Title => self.extract_title(),
                 Tag::Text => {
                     match self.reader.read_text(b"text", &mut self.page_buf) {
+                        // Don't skip Template: or Portal: for now.
                         Ok(page) => {
                             // Skip over redirects; these are handled separately.
-                            if page.starts_with("#redirect") {
+                            if page.starts_with("#redirect")
+                            // Skip over files.
+                            || page.starts_with("File:")
+                            // Skip over Wikipedia internal pages; we ignore these.
+                            || page.starts_with("Wikipedia:") {
                                 continue;
                             }
                             return Some(Page::new(self.title.clone(), self.id.clone(), page))
@@ -234,16 +239,14 @@ impl<R: Read> Iterator for PageIterator<R> {
     }
 }
 
-pub fn extract_anchors<W: Write + Send + Sync>(path: &Path, data: &Path, writer: & Mutex<W>) {
-    let indices = read_indices(path).expect("Not a valid indices file!");
+/// Extract anchors from a Wikipedia dump, sending them to an arbitrary Writer.
+pub fn extract_anchors<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: &Path, writer: &Mutex<W>) {
     let mut indices = indices.keys().collect::<Vec<_>>();
     let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
     indices.sort();
 
 
-    use extract_anchors::Anchor;
     indices.into_par_iter()
-           .take(1000)
            .for_each(|index| {
                 let store = open_seek_bzip(&data, *index).unwrap();
                 let pages = PageIterator::new(store).collect::<Vec<_>>();
@@ -253,11 +256,11 @@ pub fn extract_anchors<W: Write + Send + Sync>(path: &Path, data: &Path, writer:
                         for anchor in item.anchors {
                             match anchor {
                                 Anchor::Direct(name) => {
-                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, name, name).unwrap()
+                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, name, name).unwrap();
 
                                 },
                                 Anchor::Label{ surface, page } => {
-                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, surface, page).unwrap()
+                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, surface, page).unwrap();
                                 }
                             }
                         }
@@ -267,5 +270,15 @@ pub fn extract_anchors<W: Write + Send + Sync>(path: &Path, data: &Path, writer:
                     let mut bar = pbar.lock().unwrap();
                     bar.inc();
                 }
-            })
+            });
+}
+
+/// Write anchors from a Wikipedia dump to file.
+pub fn write_anchors(indices: &WikiDumpIndices, dump: &Path, out_path: &Path) -> io::Result<()> {
+    let anchor_file = File::create(out_path)?;
+    let writer = BufWriter::with_capacity(8192 * 1024, anchor_file);
+    let writer = Mutex::new(writer);
+
+    extract_anchors(&indices, &dump, &writer);
+    Ok(())
 }
