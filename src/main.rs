@@ -23,7 +23,7 @@ use std::io::{BufRead, BufWriter, Write};
 use std::path::{Path};
 
 
-use indices::{read_indices, write_template_indices};
+use indices::{read_indices, write_all_indices, write_template_indices};
 use templates::compile_templates;
 use utils::{open_seek_bzip};
 
@@ -32,9 +32,16 @@ use settings::Settings;
 
 fn main() {
     let settings = Settings::new("config.toml").unwrap();
-    let data = Path::new(&settings.data.data);
-    let index = Path::new(&settings.data.index);
 
-    println!("data: {:?}", data);
-    println!("index: {:?}", index);
+    println!("data: {:?}", settings.data);
+    println!("indices: {:?}", settings.indices);
+
+    let (data, indices) = (&settings.data, &settings.indices);
+
+    if !indices.pages.exists() {
+        write_all_indices(&data.index, &indices.pages);
+    }
+    if !indices.templates.exists() {
+        write_template_indices(&data.index, &indices.templates);
+    }
 }
