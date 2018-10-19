@@ -1,85 +1,63 @@
+#[macro_use] extern crate lazy_static;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
+extern crate bzip2;
+extern crate config;
+extern crate pbr;
+extern crate quick_xml;
+extern crate rayon;
 extern crate regex;
+extern crate spinners;
+extern crate zip;
 
-use std::fs::File;
-use std::io::{BufReader, BufWriter, prelude::*};
-use std::path::Path;
-use std::time::SystemTime;
-use regex::RegexBuilder;
+pub mod extract_anchors;
+pub mod find_indices;
+pub mod extract_redirects;
+pub mod indices;
+pub mod templates;
+pub mod utils;
+
+use std::collections::HashMap;
+use std::io::{BufRead, BufWriter, Write};
+use std::path::{Path};
 
 
-static TITLE_PATTERN : &'static str = "    <title>";
-static REDIRECT_PATTERN : &'static str= "    <redirect";
-static TEXT_PATTERN : &'static str = "      <text xml";
+use indices::{read_indices, write_template_indices};
+use templates::compile_templates;
+use utils::{open_seek_bzip};
 
+mod settings {
+    use std::path::Path;
+    use config::{Config, ConfigError, File};
 
-fn is_valid_alias(title: &str) -> bool {
-    if title.starts_with("Wikipedia:")
-        || title.starts_with("Template:")
-        || title.starts_with("Portal:")
-        || title.starts_with("List of ") {
-        return false;
+    /// Configuration for Wikipedia data sources.
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Data {
+        pub data: String,
+        pub index: String,
     }
-    true
-}
 
-
-fn cleanup_title(title: &str) -> String {
-    match title.find("</title>") {
-        Some(index) => title[TITLE_PATTERN.len()..index].to_owned(),
-        None => title.to_owned(),
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Settings {
+        pub data: Data
     }
-}
 
-fn extract<W: Write>(input_path: &str, out: &mut W) -> std::io::Result<()> {
-    let redirect_pattern = RegexBuilder::new("#[ ]?[^ ]+[ ]?\\[\\[(.+?)\\]\\]")
-                                        .case_insensitive(true)
-                                        .build()
-                                        .unwrap();
-    let start_time = SystemTime::now();
-    let input_file = File::open(input_path)?;
-
-    let mut invalid_count = 0;
-    let mut count = 0;
-
-    let mut title = String::new();
-    let mut in_text = false;
-    for line in BufReader::new(input_file).lines() {
-        let line = line.unwrap();
-        if line.starts_with(TITLE_PATTERN) {
-            title = line.clone();
-            continue;
-        }
-        else if line.starts_with(REDIRECT_PATTERN) && (line.starts_with(TEXT_PATTERN) || in_text) {
-            match redirect_pattern.captures(&line) {
-                Some(mch) => {
-                    title = cleanup_title(&title);
-                    let redirected_title = mch.get(1).unwrap().as_str();
-                    if is_valid_alias(&title) {
-                        out.write(format!("{}\t{}\n", title, redirected_title).as_bytes())?;
-                        count += 1;
-                    } else {
-                        invalid_count += 1;
-                    }
-                },
-                None => in_text = true,
-            }
+    impl Settings {
+        pub fn new(path: &str) -> Result<Self, ConfigError> {
+            let mut settings = Config::new();
+            settings.merge(File::with_name(path))?;
+            settings.try_into()
         }
     }
-    println!("---- Wikipedia redirect extraction done ----");
-    println!("Discarded {} redirects to wikipedia meta articles.", invalid_count);
-    println!("Extracted {} redirects.", count);
-    // println!("Saved output: {} ", output_file);
-    let duration = start_time.elapsed().unwrap();
-    println!("Done in {}.{:0>3}s", duration.as_secs(), duration.subsec_millis());
-    Ok(())
 }
+
+use settings::Settings;
 
 fn main() {
-    if Path::new("redirect.txt").exists() {
-        return;
-    }
-    let out_file = File::create("redirect.txt").unwrap();
-    let mut handle = BufWriter::new(&out_file);
-    extract("./test_data/sample-jawiki-latest-pages-articles.xml", &mut handle)
-        .expect("Failed to extract!");
+    let settings = Settings::new("config.toml").unwrap();
+    let data = Path::new(&settings.data.data);
+    let index = Path::new(&settings.data.index);
+
+    println!("data: {:?}", data);
+    println!("index: {:?}", index);
 }

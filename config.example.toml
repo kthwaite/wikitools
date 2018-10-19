@@ -1,0 +1,3 @@
+[data]
+index = "/ebs_large/stores/wikidata/enwiki-20180901-pages-articles-multistream-index.txt.bz2"
+data = "/ebs_large/stores/wikidata/enwiki-20180901-pages-articles-multistream.xml.bz2"
