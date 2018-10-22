@@ -216,15 +216,17 @@ impl<R: Read> Iterator for PageIterator<R> {
                 Tag::Id => self.extract_id(),
                 Tag::Title => self.extract_title(),
                 Tag::Text => {
+                    // Don't skip Template: or Portal: for now.
+                    // Skip over File:
+                    if self.title.starts_with("File:")
+                    // Skip over Wikipedia internal pages; we ignore these.
+                    || self.title.starts_with("Wikipedia:") {
+                        continue;
+                    }
                     match self.reader.read_text(b"text", &mut self.page_buf) {
-                        // Don't skip Template: or Portal: for now.
                         Ok(page) => {
                             // Skip over redirects; these are handled separately.
-                            if page.starts_with("#redirect")
-                            // Skip over files.
-                            || page.starts_with("File:")
-                            // Skip over Wikipedia internal pages; we ignore these.
-                            || page.starts_with("Wikipedia:") {
+                            if page.starts_with("#redirect") {
                                 continue;
                             }
                             return Some(Page::new(self.title.clone(), self.id.clone(), page))
