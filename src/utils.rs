@@ -5,21 +5,26 @@ use bzip2::{
 };
 use std::path::Path;
 use std::fs::File;
-use std::io::{self, BufRead, SeekFrom, BufReader, prelude::*};
+use std::io::{self, BufRead, SeekFrom, BufReader, BufWriter, prelude::*};
+
+use indices::read_indices;
 
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 
+/// Create a bzip2 BufReader from a File handle.
 pub fn to_decode_buffer(file: File) -> BZipReader {
     let buf = BufReader::with_capacity(8192 * 4, file);
     let dec = BzDecoder::new(buf);
     BufReader::with_capacity(8192 * 16, dec)
 }
 
+/// Open a bzip2 file.
 pub fn open_bzip(path: &Path) -> io::Result<BZipReader> {
     let file = File::open(path)?;
     Ok(to_decode_buffer(file))
 }
 
+/// Open a bzip2 multistream and seek to a zip file at a given index.
 pub fn open_seek_bzip(path: &Path, index: usize) -> io::Result<BZipReader> {
     let mut file = File::open(path)?;
     file.seek(SeekFrom::Start(index as u64))?;
@@ -164,4 +169,18 @@ impl BZipMultiStream<BufReader<File>> {
         let source = BufReader::new(file);
         Ok(Self::new(source))
     }
+}
+
+/// Extract one file to disk.
+pub fn extract_one(path: &Path, index: usize, data: &Path, out: &str) {
+    let idx = read_indices(path).unwrap();
+    let index = idx.keys().nth(index).unwrap();
+    let reader = open_seek_bzip(data, *index).unwrap();
+    let out_file = File::create(out).unwrap();
+    let mut out_buf = BufWriter::with_capacity(8192 * 2, out_file);
+    reader.lines()
+          .map(|l| l.unwrap())
+          .for_each(|line| {
+            writeln!(&mut out_buf, "{}", line);
+          });
 }
