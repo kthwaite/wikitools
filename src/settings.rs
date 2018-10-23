@@ -10,45 +10,70 @@ pub struct Data {
     pub index: PathBuf,
 }
 
-fn default_indices_path() -> PathBuf {
-    "indices".into()
-}
-
-fn default_template_indices_path() -> PathBuf {
-    "template_indices".into()
-}
 
 /// Configuration for Wikipedia data sources.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Indices {
-    #[serde(default="default_indices_path")]
+    #[serde(default="Indices::default_indices_path")]
     pub pages: PathBuf,
-    #[serde(default="default_template_indices_path")]
+    #[serde(default="Indices::default_template_indices_path")]
     pub templates: PathBuf,
+}
+
+impl Indices {
+    pub fn default_indices_path() -> PathBuf {
+        "indices".into()
+    }
+    pub fn default_template_indices_path() -> PathBuf {
+        "template_indices".into()
+    }
 }
 
 impl Default for Indices {
     fn default() -> Self {
         Indices {
-            pages: default_indices_path(),
-            templates: default_template_indices_path(),
+            pages: Indices::default_indices_path(),
+            templates: Indices::default_template_indices_path(),
         }
     }
 }
 
-
-fn default_templates_path() -> PathBuf {
-    "templates.xml".into()
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SearchIndex {
+    pub index_dir: PathBuf
 }
 
 
+/// Configuration for anchor summary files.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Anchors {
+    #[serde(default="Anchors::default_anchors_path")]
+    pub anchors: PathBuf,
+    #[serde(default="Anchors::default_anchor_counts_path")]
+    pub anchor_counts: PathBuf,
+}
+
+impl Anchors{
+    pub fn default_anchors_path() -> PathBuf {
+        "anchors.tsv".into()
+    }
+
+    pub fn default_anchor_counts_path() -> PathBuf {
+        "anchor_counts.tsv".into()
+    }
+}
+
+
+/// Settings aggregate.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Settings {
     pub data: Data,
     #[serde(default)]
     pub indices: Indices,
-    #[serde(default="default_templates_path")]
-    pub templates: PathBuf
+    #[serde(default="Settings::default_templates_path")]
+    pub templates: PathBuf,
+    pub anchors: Anchors,
+    pub search_index: SearchIndex,
 }
 
 impl Settings {
@@ -56,5 +81,9 @@ impl Settings {
         let mut settings = Config::new();
         settings.merge(File::with_name(path))?;
         settings.try_into()
+    }
+
+    pub fn default_templates_path() -> PathBuf {
+        "templates.xml".into()
     }
 }
