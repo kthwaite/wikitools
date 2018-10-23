@@ -1,16 +1,15 @@
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufRead, BufWriter, Read, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
 use indices::WikiDumpIndices;
+use fnv::FnvHashMap;
 use pbr;
-use quick_xml::{
-    self as qx,
-    events::{Event}
-};
+use quick_xml::{ self as qx, events::{Event} };
 use rayon::prelude::*;
 use regex::Regex;
+use tantivy::{ IndexWriter, schema::* };
 
 use utils::open_seek_bzip;
 
@@ -21,7 +20,7 @@ lazy_static! {
 }
 
 /// Wikipedia category label.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Category(pub String);
 
 impl Category {
@@ -33,7 +32,7 @@ impl Category {
 
 /// Wikipedia anchor, representing a link between pages, optionally with a
 /// surface realisation.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Anchor {
     Direct(String),
     Label{
@@ -45,7 +44,7 @@ pub enum Anchor {
 impl Anchor {
     /// Parse an anchor string, returning an Anchor.
     pub fn parse(anchor: &str) -> Self {
-        match anchor.find("|") {
+        match anchor.find('|') {
             Some(index) => {
                 let page = anchor[..index].to_owned();
                 let surface = anchor[index+1..].trim();
@@ -98,7 +97,7 @@ impl Anchor {
 }
 
 /// Collection of Anchors and Categories for a Wikipedia page.
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Page {
     pub title: String,
     pub id: String,
@@ -109,7 +108,7 @@ pub struct Page {
 impl Page {
     /// Create a new Page object, extracting links and categories from the text
     /// of the page.
-    pub fn new(title: String, id: String, page: String) -> Self {
+    pub fn new(title: String, id: String, page: &str) -> Self {
         Page {
             title,
             id,
@@ -130,7 +129,7 @@ impl Page {
                 let initial = &page[begin + 2..];
                 if initial.starts_with("Category:") {
                     return initial.find("]]").and_then(|end| {
-                        match initial[..end].find("|") {
+                        match initial[..end].find('|') {
                             Some(actual_end) => Some(&initial[9..actual_end]),
                             None => Some(&initial[9..end])
                         }
@@ -216,10 +215,12 @@ impl<R: Read> Iterator for PageIterator<R> {
                 Tag::Id => self.extract_id(),
                 Tag::Title => self.extract_title(),
                 Tag::Text => {
-                    // Don't skip Template: or Portal: for now.
-                    // Skip over File:
+                    // Don't skip Portal pages for now.
+                    // Skip over files.
                     if self.title.starts_with("File:")
-                    // Skip over Wikipedia internal pages; we ignore these.
+                    // Skip over templates.
+                    || self.title.starts_with("Template:")
+                    // Skip over Wikipedia internal pages.
                     || self.title.starts_with("Wikipedia:") {
                         continue;
                     }
@@ -229,7 +230,7 @@ impl<R: Read> Iterator for PageIterator<R> {
                             if page.starts_with("#redirect") {
                                 continue;
                             }
-                            return Some(Page::new(self.title.clone(), self.id.clone(), page))
+                            return Some(Page::new(self.title.clone(), self.id.clone(), &page))
                         },
                         Err(_) => return None,
                     }
@@ -258,22 +259,71 @@ pub fn extract_anchors<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: 
                         for anchor in item.anchors {
                             match anchor {
                                 Anchor::Direct(name) => {
-                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, name, name).unwrap();
+                                    writeln!(&mut w, "{}\t{}\t{}\t{}", item.id, item.title, name, name).unwrap();
 
                                 },
                                 Anchor::Label{ surface, page } => {
-                                    writeln!(&mut w, "{}\t{}\t{}\t{}\t", item.id, item.title, surface, page).unwrap();
+                                    writeln!(&mut w, "{}\t{}\t{}\t{}", item.id, item.title, surface, page).unwrap();
                                 }
                             }
                         }
                     });
                 }
                 {
-                    let mut bar = pbar.lock().unwrap();
-                    bar.inc();
+                    let mut prog_bar = pbar.lock().unwrap();
+                    prog_bar.inc();
                 }
             });
 }
+
+
+
+
+pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<IndexWriter>, schema: &Schema) {
+    let mut indices = indices.keys().collect::<Vec<_>>();
+    let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
+    indices.sort();
+
+    let (id, title, links) = (
+        schema.get_field("id").unwrap(),
+        schema.get_field("title").unwrap(),
+        schema.get_field("links").unwrap()
+    );
+
+    indices.into_par_iter()
+           .map(|index| {
+                let store = open_seek_bzip(&data, *index).unwrap();
+                let pages = PageIterator::new(store).collect::<Vec<_>>();
+                pages
+                    .into_iter()
+                    .map(|item| {
+                        let mut doc = Document::default();
+                        doc.add_u64(id, item.id.parse::<u64>().unwrap());
+                        doc.add_text(title, &item.title);
+                        for anchor in item.anchors {
+                            match anchor {
+                                Anchor::Direct(name) => {
+                                    doc.add_text(links, &name);
+                                },
+                                Anchor::Label{ page, .. } => {
+                                    doc.add_text(links, &page);
+                                }
+                            }
+                        }
+                        doc
+                    }).collect::<Vec<_>>()
+           }).for_each(|docs| {
+               {
+                   let mut index_writer = indexer.lock().expect("Failed to unlock indexer");
+                   docs.into_iter().for_each(|doc| { index_writer.add_document(doc); });
+               }
+               {
+                   let mut prog_bar = pbar.lock().unwrap();
+                   prog_bar.inc();
+               }
+           });
+}
+
 
 /// Write anchors from a Wikipedia dump to file.
 pub fn write_anchors(indices: &WikiDumpIndices, dump: &Path, out_path: &Path) -> io::Result<()> {
@@ -282,5 +332,42 @@ pub fn write_anchors(indices: &WikiDumpIndices, dump: &Path, out_path: &Path) ->
     let writer = Mutex::new(writer);
 
     extract_anchors(&indices, &dump, &writer);
+    Ok(())
+}
+
+
+pub fn write_anchor_counts<R: BufRead>(anchors: R, out_path: &Path) -> io::Result<()> {
+    let mut counter : FnvHashMap<String, usize> = Default::default();
+
+    for (index, line) in anchors.lines().map(|line| line.unwrap()).enumerate() {
+        let quad = line.split('\t').collect::<Vec<_>>();
+
+        if quad.len() < 5 {
+            continue;
+        }
+
+        let sf = quad[2];
+        let en = quad[3];
+
+        // Nested dicts will use ~5-10x RAM.
+        let sfen = format!("{}\t{}", sf, en);
+
+        counter.entry(sfen)
+               .and_modify(|v| *v += 1)
+               .or_insert(1);
+
+        if index % 100_000 == 0 {
+            println!("Processed {} lines", index);
+        }
+    }
+
+    println!("Done, writing final dump to {:?}", out_path);
+    let anchor_file = File::create(out_path)?;
+    let mut writer = BufWriter::with_capacity(8192 * 1024, anchor_file);
+
+    for (sf_en, count) in counter {
+        writeln!(&mut writer, "{}\t{}", sf_en, count)?;
+    }
+
     Ok(())
 }
