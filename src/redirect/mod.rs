@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::{self, BufRead, BufWriter, Write};
+use std::io::{BufRead, Write};
 use std::path::Path;
 use std::str;
 use std::sync::Mutex;
@@ -9,10 +8,10 @@ use pbr;
 use quick_xml::{self as qx, events::Event};
 use rayon::prelude::*;
 
-use indices::{read_indices};
+use indices::WikiDumpIndices;
 use utils::open_seek_bzip;
 
-
+/// Check if a Wikipedia page title constitutees a valid redirect.
 fn is_valid_alias(title: &str) -> bool {
     if title.starts_with("Wikipedia:")
         || title.starts_with("Template:")
@@ -23,12 +22,14 @@ fn is_valid_alias(title: &str) -> bool {
     true
 }
 
+/// Wikipedia redirect.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Redirect {
     from: String,
     to: String,
 }
 
+/// Iterator over redirects in an XML file of Wikipedia data.
 pub struct RedirectIterator<R: BufRead> {
     reader: qx::Reader<R>,
     buf: Vec<u8>,
@@ -36,6 +37,7 @@ pub struct RedirectIterator<R: BufRead> {
     title: String,
 }
 
+/// Extract the destination page for a <redirect> tag.
 fn extract_to<'a>(tag: &'a qx::events::BytesStart) -> Option<Cow<'a, [u8]>> {
     // TODO: clunky first pass, revise
     tag
@@ -53,6 +55,7 @@ fn extract_to<'a>(tag: &'a qx::events::BytesStart) -> Option<Cow<'a, [u8]>> {
 }
 
 impl<R: BufRead> RedirectIterator<R> {
+    /// Create a new RedirectIterator from a reader.
     pub fn new(reader: R) -> Self {
         RedirectIterator {
             reader: qx::Reader::from_reader(reader),
@@ -97,81 +100,26 @@ impl<R: BufRead> Iterator for RedirectIterator<R> {
 }
 
 
-fn extract_xml<R: BufRead, W: Write>(reader: R, writer: &Mutex<BufWriter<W>>) -> io::Result<(usize, usize)> {
-    let mut invalid_count = 0;
-    let mut count = 0;
-
-    let mut title = String::new();
-
-    let mut buf = Vec::new();
-    let mut text_buf = Vec::new();
-
-    let mut reader = qx::Reader::from_reader(reader);
-    loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref tag)) => {
-                if let b"title" = tag.name() {
-                    title = reader.read_text(b"title", &mut text_buf).unwrap();
-                }
-            },
-            Ok(Event::Empty(ref tag)) => {
-                if let b"redirect" = tag.name() {
-                    if is_valid_alias(&title) {
-                        // TODO: clunky first pass, revise
-                        if let Some(to_title) = tag.attributes().filter_map(|a| {
-                            if let Ok(attr) = a {
-                                if attr.key == b"title" {
-                                    return Some(attr);
-                                }
-                            }
-                            None
-                        })
-                        .map(|a| a.value)
-                        .nth(0) {
-                            let red = str::from_utf8(&to_title).unwrap();
-                            {
-                                let mut out = writer.lock().unwrap();
-                                writeln!(out, "{}\t{}", title, red)?;
-                            }
-                            count += 1;
-                        }
-                    } else {
-                        invalid_count += 1;
-                    }
-                }
-            },
-            Ok(Event::Eof) => break,
-            Ok(_) => (),
-            Err(_) => break,
-        }
-    }
-    Ok((count, invalid_count))
-}
-
-
-/// Dump all redirects to file.
-pub fn dump_redirects(indices: &Path, data: &Path, out_path: &Path) {
-    let idx = read_indices(indices).unwrap();
-    let indices = idx.keys().collect::<Vec<_>>();
-
-    let redfile = File::create(out_path).unwrap();
-    let redbuf = Mutex::new(BufWriter::with_capacity(1024 * 1024, redfile));
+/// Dump all redirects to file as tab-separated pairs.
+pub fn write_redirects<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: &Path, writer: &Mutex<W>) {
+    let indices = indices.keys().collect::<Vec<_>>();
 
     let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
 
-    let (valid, invalid) = indices.into_par_iter()
-           .map(|index| {
+    indices.into_par_iter()
+           .for_each(|index| {
                 let reader = open_seek_bzip(&data, *index).unwrap();
-                let (valid, invalid) = extract_xml(reader, &redbuf).unwrap();
+                let iter = RedirectIterator::new(reader);
+                let reds = iter.into_iter().collect::<Vec<Redirect>>();
+                {
+                    let mut w = writer.lock().unwrap();
+                    reds.into_iter().for_each(|red| {
+                        writeln!(w, "{}\t{}", red.from, red.to);
+                    });
+                }
                 {
                     let mut prog = pbar.lock().unwrap();
                     prog.inc();
                 }
-                (valid, invalid)
-           })
-           .reduce(|| (0, 0), |curr, next| {
-                (curr.0 + next.0, curr.1 + next.1)
            });
-    println!("Dumped {} redirects to {}", valid, out_path.to_str().unwrap());
-    println!("{} redirects were invalid", invalid);
 }
