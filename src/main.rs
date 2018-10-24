@@ -15,11 +15,12 @@ extern crate tantivy;
 extern crate zip;
 
 mod extract_anchors;
-mod extract_redirects;
 mod find_indices;
 mod indices;
+mod page;
 mod settings;
-mod templates;
+mod redirect;
+mod template;
 mod utils;
 
 use std::path::Path;
@@ -34,7 +35,8 @@ use tantivy::{
 use extract_anchors::{index_anchors, write_anchors};
 use indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
 use settings::Settings;
-use templates::compile_templates;
+use template::compile_templates;
+
 
 /// Build a Tantivy index from anchors in a wikipedia dump.
 fn build_index(index_dir: &Path, page_indices: &WikiDumpIndices, data_dump: &Path, buf_size: usize) -> tantivy::Result<(Schema, Index)> {

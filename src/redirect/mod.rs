@@ -3,6 +3,7 @@ use std::io::{self, BufRead, BufWriter, Write};
 use std::path::Path;
 use std::str;
 use std::sync::Mutex;
+use std::borrow::Cow;
 
 use pbr;
 use quick_xml::{self as qx, events::Event};
@@ -20,6 +21,79 @@ fn is_valid_alias(title: &str) -> bool {
         return false;
     }
     true
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Redirect {
+    from: String,
+    to: String,
+}
+
+pub struct RedirectIterator<R: BufRead> {
+    reader: qx::Reader<R>,
+    buf: Vec<u8>,
+    text_buf: Vec<u8>,
+    title: String,
+}
+
+fn extract_to<'a>(tag: &'a qx::events::BytesStart) -> Option<Cow<'a, [u8]>> {
+    // TODO: clunky first pass, revise
+    tag
+        .attributes()
+        .filter_map(|a| {
+            if let Ok(attr) = a {
+                if attr.key == b"title" {
+                    return Some(attr);
+                }
+            }
+            None
+        })
+        .map(|a| a.value)
+        .nth(0)
+}
+
+impl<R: BufRead> RedirectIterator<R> {
+    pub fn new(reader: R) -> Self {
+        RedirectIterator {
+            reader: qx::Reader::from_reader(reader),
+            buf: Default::default(),
+            text_buf: Default::default(),
+            title: Default::default(),
+        }
+    }
+
+}
+
+impl<R: BufRead> Iterator for RedirectIterator<R> {
+    type Item = Redirect;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.reader.read_event(&mut self.buf) {
+                Ok(Event::Start(ref tag)) => {
+                    if let b"title" = tag.name() {
+                        self.title = self.reader.read_text(b"title", &mut self.text_buf).unwrap();
+                    }
+                },
+                Ok(Event::Empty(ref tag)) => {
+                    if let b"redirect" = tag.name() {
+                        if is_valid_alias(&self.title) {
+                            if let Some(to_title) = extract_to(tag) {
+                                let to_title = str::from_utf8(&to_title).unwrap();
+                                return Some(Redirect{
+                                    from: self.title.clone(),
+                                    to: to_title.to_owned()
+                                });
+                            }
+                        }
+                    }
+                },
+                Ok(Event::Eof) => break,
+                Ok(_) => (),
+                Err(_) => break,
+            }
+        }
+        None
+    }
 }
 
 
