@@ -11,7 +11,9 @@ use rayon::prelude::*;
 use indices::WikiDumpIndices;
 use utils::open_seek_bzip;
 
-/// Check if a Wikipedia page title constitutees a valid redirect.
+/// Check if a Wikipedia page title constitutes a valid redirect.
+/// Wikipedia internal pages, templates, portals and lists are all currently
+/// ignored for the purposes of extracting redirects.
 fn is_valid_alias(title: &str) -> bool {
     if title.starts_with("Wikipedia:")
         || title.starts_with("Template:")
@@ -22,7 +24,7 @@ fn is_valid_alias(title: &str) -> bool {
     true
 }
 
-/// Wikipedia redirect.
+/// An individual Wikipedia redirect.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Redirect {
     from: String,

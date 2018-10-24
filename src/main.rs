@@ -24,6 +24,10 @@ mod template;
 mod utils;
 
 use std::path::Path;
+use std::fs::File;
+use std::io::{self, BufWriter};
+use std::sync::Mutex;
+
 use tantivy::{
     Index,
     schema::*,
@@ -32,10 +36,12 @@ use tantivy::{
     directory::MmapDirectory
 };
 
-use extract_anchors::{index_anchors, write_anchors};
+use extract_anchors::{index_anchors};
 use indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
+use redirect::write_redirects;
 use settings::Settings;
 use template::compile_templates;
+use extract_anchors::{extract_anchors, extract_anchors_jsonl};
 
 
 /// Build a Tantivy index from anchors in a wikipedia dump.
@@ -48,7 +54,6 @@ fn build_index(index_dir: &Path, page_indices: &WikiDumpIndices, data_dump: &Pat
     let schema = schema_builder.build();
     let index = Index::create_in_dir(&index_dir, schema.clone()).unwrap();
 
-    use std::sync::Mutex;
     let index_writer = index.writer(buf_size)?;
     let index_writer = Mutex::new(index_writer);
 
@@ -60,6 +65,63 @@ fn build_index(index_dir: &Path, page_indices: &WikiDumpIndices, data_dump: &Pat
     Ok((schema, index))
 }
 
+
+fn mutex_bufwriter(out_path: &Path, buf_size: usize) -> io::Result<Mutex<BufWriter<File>>> {
+    let writer = File::create(out_path)?;
+    let writer = if buf_size == 0 {
+        BufWriter::new(writer)
+    } else {
+        BufWriter::with_capacity(buf_size, writer)
+    };
+    Ok(Mutex::new(writer))
+}
+
+/// Dump a list of redirects to file as tab-separated pairs.
+fn dump_redirects(page_indices: &WikiDumpIndices, data_dump: &Path, out_path: &Path, buf_size: usize)-> io::Result<()> {
+    let writer = mutex_bufwriter(out_path, buf_size)?;
+    write_redirects(&page_indices, &data_dump, &writer);
+    Ok(())
+}
+
+/// Dump page anchors to a JSONL file.
+fn dump_page_anchors(page_indices: &WikiDumpIndices, data_dump: &Path, out_path: &Path, buf_size: usize) -> io::Result<()> {
+    let writer = mutex_bufwriter(out_path, buf_size)?;
+
+    extract_anchors_jsonl(&page_indices, &data_dump, &writer);
+    Ok(())
+}
+
+/// Write anchors from a Wikipedia dump to text file.
+pub fn write_anchors(indices: &WikiDumpIndices, dump: &Path, out_path: &Path, buf_size: usize) -> io::Result<()> {
+    let writer = mutex_bufwriter(out_path, buf_size)?;
+
+    extract_anchors(&indices, &dump, &writer);
+    Ok(())
+}
+
+fn one_query(index: &Index, schema: &Schema, query: &str) {
+    index.load_searchers().unwrap();
+
+    let searcher = index.searcher();
+    let (title, links) = (
+        schema.get_field("title").unwrap(),
+        schema.get_field("links").unwrap()
+    );
+    let query_parser = QueryParser::for_index(&index, vec![links]);
+    let query = query_parser.parse_query(query).unwrap();
+
+    let mut top_collector = TopCollector::with_limit(10);
+
+    searcher.search(&*query, &mut top_collector).unwrap();
+    let doc_addresses = top_collector.docs();
+
+    for doc_address in doc_addresses {
+        let retrieved_doc = searcher.doc(doc_address).unwrap();
+        if let Some(doc_title) = retrieved_doc.get_first(title) {
+            println!("{:?}", doc_title);
+        }
+    }
+}
 
 fn main() {
     let settings = Settings::new("config.toml").unwrap();
@@ -75,6 +137,9 @@ fn main() {
         read_indices(&indices.pages).unwrap()
     };
 
+
+
+    /*
     if !indices.templates.exists() {
         write_template_indices(&data.index, &indices.templates);
     }
@@ -84,12 +149,16 @@ fn main() {
         compile_templates(&template_indices, &data.dump, &settings.templates);
     };
 
+
+
+    */
+
+    /*
     let anchors = &settings.anchors;
     if !anchors.anchors.exists() {
         write_anchors(&page_indices, &data.dump, &anchors.anchors)
             .expect("Failed to extract anchors!");
     }
-
 
     let index_dir = &settings.search_index.index_dir;
 
@@ -98,29 +167,9 @@ fn main() {
             .expect("Failed to build Index")
     } else {
         let dir = MmapDirectory::open(&index_dir).unwrap();
-        let index = Index::open(dir).expect("Failed to open Index");
+        let index = Index::open(dir).expect("Failed to load Index");
         (index.schema(), index)
     };
 
-    index.load_searchers().unwrap();
-
-    let searcher = index.searcher();
-    let (title, links) = (
-        schema.get_field("title").unwrap(),
-        schema.get_field("links").unwrap()
-    );
-    let query_parser = QueryParser::for_index(&index, vec![links]);
-    let query = query_parser.parse_query("John Mandeville").unwrap();
-
-    let mut top_collector = TopCollector::with_limit(10);
-
-    searcher.search(&*query, &mut top_collector).unwrap();
-    let doc_addresses = top_collector.docs();
-
-    for doc_address in doc_addresses {
-        let retrieved_doc = searcher.doc(doc_address).unwrap();
-        if let Some(doc_title) = retrieved_doc.get_first(title) {
-            println!("{:?}", doc_title);
-        }
-    }
+    */
 }

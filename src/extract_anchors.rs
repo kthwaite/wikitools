@@ -70,6 +70,7 @@ pub fn extract_anchors<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: 
             });
 }
 
+/// Extract page-anchors in JSONL format.
 pub fn extract_anchors_jsonl<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: &Path, writer: &Mutex<W>) {
     let mut indices = indices.keys().collect::<Vec<_>>();
     let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
@@ -103,7 +104,7 @@ pub fn extract_anchors_jsonl<W: Write + Send + Sync>(indices: &WikiDumpIndices, 
             });
 }
 
-
+/// Use tantivy to index anchors for each page.
 pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<IndexWriter>, schema: &Schema) {
     let mut indices = indices.keys().collect::<Vec<_>>();
     let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
@@ -137,7 +138,8 @@ pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<Ind
                         }
                         doc
                     }).collect::<Vec<_>>()
-           }).for_each(|docs| {
+           })
+           .for_each(|docs| {
                {
                    let mut index_writer = indexer.lock().expect("Failed to unlock indexer");
                    docs.into_iter().for_each(|doc| { index_writer.add_document(doc); });
@@ -147,17 +149,6 @@ pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<Ind
                    prog_bar.inc();
                }
            });
-}
-
-
-/// Write anchors from a Wikipedia dump to file.
-pub fn write_anchors(indices: &WikiDumpIndices, dump: &Path, out_path: &Path) -> io::Result<()> {
-    let anchor_file = File::create(out_path)?;
-    let writer = BufWriter::with_capacity(8192 * 1024, anchor_file);
-    let writer = Mutex::new(writer);
-
-    extract_anchors(&indices, &dump, &writer);
-    Ok(())
 }
 
 
