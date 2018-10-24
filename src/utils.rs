@@ -7,7 +7,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{self, BufRead, SeekFrom, BufReader, BufWriter, prelude::*};
 
-use indices::read_indices;
+use indices::{read_indices, WikiDumpIndices};
 
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 
@@ -172,9 +172,10 @@ impl BZipMultiStream<BufReader<File>> {
 }
 
 /// Extract one file to disk.
-pub fn extract_one(path: &Path, index: usize, data: &Path, out: &str) {
-    let idx = read_indices(path).unwrap();
-    let index = idx.keys().nth(index).unwrap();
+pub fn extract_one(indices: &WikiDumpIndices, index: usize, data: &Path, out: &str) {
+    let mut indices = indices.keys().collect::<Vec<_>>();
+    indices.sort();
+    let index = indices[index];
     let reader = open_seek_bzip(data, *index).unwrap();
     let out_file = File::create(out).unwrap();
     let mut out_buf = BufWriter::with_capacity(8192 * 2, out_file);
