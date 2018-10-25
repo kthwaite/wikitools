@@ -7,10 +7,20 @@ use indices::WikiDumpIndices;
 use fnv::FnvHashMap;
 use pbr;
 use rayon::prelude::*;
-use tantivy::{ IndexWriter, schema::* };
+use tantivy::{IndexWriter, schema::*};
 
-use page::{Anchor, PageIterator};
+use page::{Anchor, Page, PageIterator, PageWriter};
 use utils::open_seek_bzip;
+
+
+
+/// Extract a vector of Pages from the zipped store at a given index in a
+/// Wikipedia dump.
+fn index_to_pages(data: &Path, index: &usize) -> Vec<Page> {
+    let store = open_seek_bzip(&data, *index).unwrap();
+    PageIterator::new(store).collect::<Vec<_>>()
+}
+
 
 
 /// Extract anchors from a Wikipedia dump, writing them to JSON.
@@ -22,8 +32,7 @@ pub fn extract_pages_json<W: Write + Send + Sync>(indices: &WikiDumpIndices, dat
     use serde_json;
     indices.into_par_iter()
            .for_each(|index| {
-                let store = open_seek_bzip(&data, *index).unwrap();
-                let pages = PageIterator::new(store).collect::<Vec<_>>();
+                let pages = index_to_pages(data, index);
                 {
                     let mut w = writer.lock().unwrap();
                     pages.into_iter().for_each(|page| {
@@ -37,7 +46,11 @@ pub fn extract_pages_json<W: Write + Send + Sync>(indices: &WikiDumpIndices, dat
             });
 }
 
-pub fn extract_anchors<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: &Path, writer: &Mutex<W>) {
+/// Extract page data and write using the specified PageWriter.
+pub fn extract_with_writer<P, W>(_page_writer: P, indices: &WikiDumpIndices, data: &Path, writer: &Mutex<W>)
+    where P: PageWriter,
+          W: Write + Send + Sync {
+
     let mut indices = indices.keys().collect::<Vec<_>>();
     let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
     indices.sort();
@@ -45,56 +58,11 @@ pub fn extract_anchors<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: 
 
     indices.into_par_iter()
            .for_each(|index| {
-                let store = open_seek_bzip(&data, *index).unwrap();
-                let pages = PageIterator::new(store).collect::<Vec<_>>();
+                let pages = index_to_pages(data, index);
                 {
-                    let mut w = writer.lock().unwrap();
-                    pages.into_iter().for_each(|item| {
-                        for anchor in item.anchors {
-                            match anchor {
-                                Anchor::Direct(name) => {
-                                    writeln!(&mut w, "{}\t{}\t{}\t{}", item.id, item.title, name, name).unwrap();
-
-                                },
-                                Anchor::Label{ surface, page } => {
-                                    writeln!(&mut w, "{}\t{}\t{}\t{}", item.id, item.title, surface, page).unwrap();
-                                }
-                            }
-                        }
-                    });
-                }
-                {
-                    let mut prog_bar = pbar.lock().unwrap();
-                    prog_bar.inc();
-                }
-            });
-}
-
-/// Extract page-anchors in JSONL format.
-pub fn extract_anchors_jsonl<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: &Path, writer: &Mutex<W>) {
-    let mut indices = indices.keys().collect::<Vec<_>>();
-    let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
-    indices.sort();
-    indices.into_par_iter()
-           .for_each(|index| {
-                let store = open_seek_bzip(&data, *index).unwrap();
-                let pages = PageIterator::new(store).collect::<Vec<_>>();
-                {
-                    let mut w = writer.lock().unwrap();
+                    let w = &mut *writer.lock().unwrap();
                     pages.into_iter().for_each(|page| {
-                        let anchors = page.anchors.into_iter()
-                            .map(|anchor| {
-                                match anchor {
-                                    Anchor::Direct(name) => name,
-                                    Anchor::Label{page, .. } => page
-                                }
-                            })
-                            .map(|anchor| {
-                                format!(r#""{}""#, anchor.replace("\"", "\\\""))
-                            })
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        writeln!(w, "{{ \"title\": \"{}\", \"id\": {}, \"anchors\": [{}] }},", page.title, page.id, anchors);
+                        P::write(page, w).unwrap();
                     });
                 }
                 {
@@ -103,6 +71,8 @@ pub fn extract_anchors_jsonl<W: Write + Send + Sync>(indices: &WikiDumpIndices, 
                 }
             });
 }
+
+
 
 /// Use tantivy to index anchors for each page.
 pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<IndexWriter>, schema: &Schema) {
@@ -118,8 +88,7 @@ pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<Ind
 
     indices.into_par_iter()
            .map(|index| {
-                let store = open_seek_bzip(&data, *index).unwrap();
-                let pages = PageIterator::new(store).collect::<Vec<_>>();
+                let pages = index_to_pages(data, index);
                 pages
                     .into_iter()
                     .map(|item| {
@@ -151,7 +120,7 @@ pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<Ind
            });
 }
 
-
+/// Write page-page anchor counts.
 pub fn write_anchor_counts<R: BufRead>(anchors: R, out_path: &Path) -> io::Result<()> {
     let mut counter : FnvHashMap<String, usize> = Default::default();
 
