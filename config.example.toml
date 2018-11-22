@@ -1,7 +1,10 @@
 [data]
 index =
-data =
+dump =
 
 [indices]
 indices =
 template_indices =
+
+[search_index]
+index_dir = './wiki-index'
