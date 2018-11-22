@@ -14,7 +14,7 @@ extern crate spinners;
 extern crate tantivy;
 extern crate zip;
 
-mod extract_anchors;
+mod extract;
 mod find_indices;
 mod indices;
 mod page;
@@ -36,12 +36,13 @@ use tantivy::{
     directory::MmapDirectory
 };
 
-use extract_anchors::{index_anchors};
+use extract::{index_anchors};
 use indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
 use redirect::write_redirects;
 use settings::Settings;
 use template::compile_templates;
-use extract_anchors::{extract_anchors, extract_anchors_jsonl};
+use extract::extract_with_writer;
+use page::writer::{AnchorWriterJSONL, AnchorWriterTSV};
 
 
 /// Build a Tantivy index from anchors in a wikipedia dump.
@@ -66,7 +67,7 @@ fn build_index(index_dir: &Path, page_indices: &WikiDumpIndices, data_dump: &Pat
 }
 
 
-fn mutex_bufwriter(out_path: &Path, buf_size: usize) -> io::Result<Mutex<BufWriter<File>>> {
+fn mutex_bufwriter<P: AsRef<Path>>(out_path: P, buf_size: usize) -> io::Result<Mutex<BufWriter<File>>> {
     let writer = File::create(out_path)?;
     let writer = if buf_size == 0 {
         BufWriter::new(writer)
@@ -87,7 +88,7 @@ fn dump_redirects(page_indices: &WikiDumpIndices, data_dump: &Path, out_path: &P
 fn dump_page_anchors(page_indices: &WikiDumpIndices, data_dump: &Path, out_path: &Path, buf_size: usize) -> io::Result<()> {
     let writer = mutex_bufwriter(out_path, buf_size)?;
 
-    extract_anchors_jsonl(&page_indices, &data_dump, &writer);
+    extract_with_writer(AnchorWriterJSONL, &page_indices, &data_dump, &writer);
     Ok(())
 }
 
@@ -95,7 +96,7 @@ fn dump_page_anchors(page_indices: &WikiDumpIndices, data_dump: &Path, out_path:
 pub fn write_anchors(indices: &WikiDumpIndices, dump: &Path, out_path: &Path, buf_size: usize) -> io::Result<()> {
     let writer = mutex_bufwriter(out_path, buf_size)?;
 
-    extract_anchors(&indices, &dump, &writer);
+    extract_with_writer(AnchorWriterTSV, &indices, &dump, &writer);
     Ok(())
 }
 
@@ -137,9 +138,6 @@ fn main() {
         read_indices(&indices.pages).unwrap()
     };
 
-
-
-    /*
     if !indices.templates.exists() {
         write_template_indices(&data.index, &indices.templates);
     }
@@ -150,10 +148,6 @@ fn main() {
     };
 
 
-
-    */
-
-    /*
     let anchors = &settings.anchors;
     if !anchors.anchors.exists() {
         write_anchors(&page_indices, &data.dump, &anchors.anchors)
@@ -170,6 +164,4 @@ fn main() {
         let index = Index::open(dir).expect("Failed to load Index");
         (index.schema(), index)
     };
-
-    */
 }
