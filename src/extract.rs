@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufWriter, Write};
 use std::path::Path;
@@ -72,6 +73,59 @@ pub fn extract_with_writer<P, W>(
             prog_bar.inc();
         }
     });
+}
+
+
+
+pub fn extract_anchor_counts(
+    indices: &WikiDumpIndices,
+    data: &Path,
+) -> HashMap<String, HashMap<String, usize>> {
+    let mut indices = indices.keys().collect::<Vec<_>>();
+    let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
+    indices.sort();
+
+    indices.into_par_iter().map(|index| {
+        let pages = index_to_pages(data, index);
+        let anchors : HashMap<String, HashMap<String, usize>> = pages
+            .into_iter()
+            .map(|page| page.anchors)
+            .fold(HashMap::default(), |mut acc, anchors| {
+                for anchor in anchors {
+                    let (surf_form, entity) : (String, String) = match anchor {
+                        Anchor::Direct(name) => {
+                            let name = name.trim();
+                            (name.to_lowercase(), name.to_string())
+                        },
+                        Anchor::Label { surface, page } => (surface.trim().to_lowercase(), page.trim().to_string()),
+                    };
+
+                    acc.entry(surf_form)
+                        .or_insert_with(HashMap::default)
+                        .entry(entity.to_owned())
+                        .and_modify(|v| *v += 1)
+                        .or_insert(1);
+                }
+                acc
+            });
+        anchors
+    })
+    .reduce(HashMap::default, |mut acc, map| {
+        for (key, value) in map.into_iter() {
+            let val = acc.entry(key)
+                        .or_insert_with(HashMap::default);
+            for (sk, sv) in value.into_iter() {
+                val.entry(sk)
+                    .and_modify(|v| *v += sv)
+                    .or_insert(sv);
+            }
+        }
+        {
+            let mut prog_bar = pbar.lock().unwrap();
+            prog_bar.inc();
+        }
+        acc
+    })
 }
 
 /// Use tantivy to index anchors for each page.

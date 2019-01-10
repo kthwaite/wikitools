@@ -24,8 +24,7 @@ use tantivy::{
     collector::TopCollector, directory::MmapDirectory, query::QueryParser, schema::*, Index,
 };
 
-use crate::extract::extract_with_writer;
-use crate::extract::index_anchors;
+use crate::extract::{index_anchors, extract_with_writer, extract_anchor_counts};
 use crate::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
 use crate::page::writer::{AnchorWriterJSONL, AnchorWriterTSV};
 use crate::redirect::write_redirects;
@@ -175,6 +174,20 @@ fn main() {
             .expect("Failed to extract anchors!");
     }
 
+
+    let anchor_counts = extract_anchor_counts(&page_indices, &data.dump);
+    let out_file = File::open("anchor-counts-2019-01-10").unwrap();
+    let mut writer = BufWriter::with_capacity(4096, out_file);
+    let mut prog_bar = pbr::ProgressBar::new(anchor_counts.len() as u64);
+    use std::io::Write;
+    for (surface_form, entities) in anchor_counts {
+        for (entity, count) in entities {
+            writeln!(writer, "{}\t{}\t{}", surface_form, entity, count).unwrap();
+        }
+        prog_bar.inc();
+    }
+    
+    /*
     let index_dir = &settings.search_index.index_dir;
 
     let (_schema, _index) = if !index_dir.exists() {
