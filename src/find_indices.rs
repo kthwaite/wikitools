@@ -1,7 +1,7 @@
 pub struct FindIndices<'a> {
     haystack: &'a str,
     needle: String,
-    offset: usize
+    offset: usize,
 }
 
 impl<'a> FindIndices<'a> {
@@ -9,7 +9,7 @@ impl<'a> FindIndices<'a> {
         FindIndices {
             haystack,
             needle: String::from(needle),
-            offset: 0
+            offset: 0,
         }
     }
 }
@@ -18,12 +18,11 @@ impl<'a> Iterator for FindIndices<'a> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.haystack.find(&self.needle)
-                     .and_then(|index| {
-                        self.haystack = &self.haystack[index + 1..];
-                        self.offset += index + 1;
-                        Some(self.offset - 1)
-                     })
+        self.haystack.find(&self.needle).and_then(|index| {
+            self.haystack = &self.haystack[index + 1..];
+            self.offset += index + 1;
+            Some(self.offset - 1)
+        })
     }
 }
 
@@ -39,15 +38,15 @@ impl IndicesOf for str {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
     fn test_indices_of() {
-        let idx = "abaabaaaababbbaaaababbaab".indices_of("b")
-                                             .collect::<Vec<_>>();
-        assert_eq!(idx, vec![1,4,9,11,12,13,18,20,21,24]);
+        let idx = "abaabaaaababbbaaaababbaab"
+            .indices_of("b")
+            .collect::<Vec<_>>();
+        assert_eq!(idx, vec![1, 4, 9, 11, 12, 13, 18, 20, 21, 24]);
     }
 }

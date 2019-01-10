@@ -1,11 +1,7 @@
-use bzip2::{
-    Decompress,
-    Status,
-    read::BzDecoder
-};
-use std::path::Path;
+use bzip2::{read::BzDecoder, Decompress, Status};
 use std::fs::File;
-use std::io::{self, BufRead, SeekFrom, BufReader, BufWriter, prelude::*};
+use std::io::{self, prelude::*, BufRead, BufReader, BufWriter, SeekFrom};
+use std::path::Path;
 
 use crate::indices::WikiDumpIndices;
 
@@ -30,7 +26,6 @@ pub fn open_seek_bzip(path: &Path, index: usize) -> io::Result<BZipReader> {
     file.seek(SeekFrom::Start(index as u64))?;
     Ok(to_decode_buffer(file))
 }
-
 
 #[derive(Debug)]
 pub struct LineView<'a, B: 'a> {
@@ -57,18 +52,17 @@ impl<'a, B: BufRead> Iterator for LineView<'a, B> {
                     }
                 }
                 Some(line)
-            },
+            }
             Err(_e) => None,
         }
     }
 }
 
-
 pub struct BzDecoderMulti<R> {
     pub done: bool,
     pub data: Decompress,
     pub obj: R,
-    pub is_eof: bool
+    pub is_eof: bool,
 }
 
 impl<R> BzDecoderMulti<R> {
@@ -109,15 +103,13 @@ impl<R: BufRead> Read for BzDecoderMulti<R> {
             }
             self.obj.consume(consumed);
 
-            let ret = ret.map_err(|e| {
-                io::Error::new(io::ErrorKind::InvalidInput, e)
-            })?;
+            let ret = ret.map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
             if ret == Status::StreamEnd {
                 self.done = true;
-                return Ok(read)
+                return Ok(read);
             }
             if read > 0 || self.is_eof || buf.is_empty() {
-                return Ok(read)
+                return Ok(read);
             }
         }
     }
@@ -126,20 +118,17 @@ impl<R: BufRead> Read for BzDecoderMulti<R> {
 pub struct BZipMultiStream<R> {
     reader: BufReader<BzDecoderMulti<R>>,
     done: bool,
-    pub bytes: usize
-
+    pub bytes: usize,
 }
-
 
 impl<R: BufRead> BZipMultiStream<R> {
     pub fn new(source: R) -> Self {
         BZipMultiStream {
             reader: BufReader::new(BzDecoderMulti::new(source)),
             done: false,
-            bytes: 0
+            bytes: 0,
         }
     }
-
 
     pub fn done(&self) -> bool {
         self.done
@@ -162,7 +151,6 @@ impl<R: BufRead> BZipMultiStream<R> {
     }
 }
 
-
 impl BZipMultiStream<BufReader<File>> {
     pub fn open(path: &Path) -> io::Result<Self> {
         let file = File::open(path)?;
@@ -172,17 +160,20 @@ impl BZipMultiStream<BufReader<File>> {
 }
 
 /// Extract one file to disk.
-pub fn extract_one(indices: &WikiDumpIndices, index: usize, data: &Path, out: &str) -> Result<(), io::Error> {
+pub fn extract_one(
+    indices: &WikiDumpIndices,
+    index: usize,
+    data: &Path,
+    out: &str,
+) -> Result<(), io::Error> {
     let mut indices = indices.keys().collect::<Vec<_>>();
     indices.sort();
     let index = indices[index];
     let reader = open_seek_bzip(data, *index).unwrap();
     let out_file = File::create(out).unwrap();
     let mut out_buf = BufWriter::with_capacity(8192 * 2, out_file);
-    reader.lines()
-          .map(|l| l.unwrap())
-          .for_each(|line| {
-            writeln!(&mut out_buf, "{}", line).unwrap();
-          });
+    reader.lines().map(|l| l.unwrap()).for_each(|line| {
+        writeln!(&mut out_buf, "{}", line).unwrap();
+    });
     Ok(())
 }

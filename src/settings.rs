@@ -1,5 +1,5 @@
 use config::{Config, ConfigError, File};
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 /// Configuration for Wikipedia data sources.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -10,13 +10,12 @@ pub struct Data {
     pub index: PathBuf,
 }
 
-
 /// Configuration for Wikipedia data sources.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Indices {
-    #[serde(default="Indices::default_indices_path")]
+    #[serde(default = "Indices::default_indices_path")]
     pub pages: PathBuf,
-    #[serde(default="Indices::default_template_indices_path")]
+    #[serde(default = "Indices::default_template_indices_path")]
     pub templates: PathBuf,
 }
 
@@ -40,20 +39,19 @@ impl Default for Indices {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchIndex {
-    pub index_dir: PathBuf
+    pub index_dir: PathBuf,
 }
-
 
 /// Configuration for anchor summary files.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Anchors {
-    #[serde(default="Anchors::default_anchors_path")]
+    #[serde(default = "Anchors::default_anchors_path")]
     pub anchors: PathBuf,
-    #[serde(default="Anchors::default_anchor_counts_path")]
+    #[serde(default = "Anchors::default_anchor_counts_path")]
     pub anchor_counts: PathBuf,
 }
 
-impl Anchors{
+impl Anchors {
     pub fn default_anchors_path() -> PathBuf {
         "anchors.tsv".into()
     }
@@ -63,14 +61,13 @@ impl Anchors{
     }
 }
 
-
 /// Settings aggregate.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Settings {
     pub data: Data,
     #[serde(default)]
     pub indices: Indices,
-    #[serde(default="Settings::default_templates_path")]
+    #[serde(default = "Settings::default_templates_path")]
     pub templates: PathBuf,
     pub anchors: Anchors,
     pub search_index: SearchIndex,
