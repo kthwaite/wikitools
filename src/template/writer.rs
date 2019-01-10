@@ -2,15 +2,16 @@ use std::fs::File;
 use std::io::{self, Stdout, BufWriter, Write};
 use std::sync::Mutex;
 
-use template::Template;
+use crate::template::Template;
 
 
 pub trait TemplateWriter {
-    fn write_template(&self, title: String, page: String) {
+    fn write_template(&self, title: String, page: String) -> io::Result<()> {
         let template : Template = Template::from_unclean(title, page);
-        self.write_template_impl(template);
+        self.write_template_impl(template)?;
+        Ok(())
     }
-    fn write_template_impl(&self, template: Template);
+    fn write_template_impl(&self, template: Template) -> io::Result<()>;
 }
 
 
@@ -33,9 +34,10 @@ impl FileTemplateWriter {
 
 impl TemplateWriter for FileTemplateWriter {
     /// Write a Template to the wrapped File.
-    fn write_template_impl(&self, template: Template) {
+    fn write_template_impl(&self, template: Template) -> io::Result<()> {
         let mut output = self.writer.lock().unwrap();
-        writeln!(&mut output, "{}", template);
+        writeln!(&mut output, "{}", template)?;
+        Ok(())
     }
 }
 
@@ -51,8 +53,9 @@ impl StdoutTemplateWriter {
 
 impl TemplateWriter for StdoutTemplateWriter {
     /// Write template to stdout.
-    fn write_template_impl(&self, template: Template) {
+    fn write_template_impl(&self, template: Template) -> io::Result<()> {
         let mut output = self.0.lock();
-        write!(&mut output, "{}", template).unwrap();
+        write!(&mut output, "{}", template)?;
+        Ok(())
     }
 }

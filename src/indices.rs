@@ -1,5 +1,3 @@
-use utils::open_bzip;
-
 use std::collections::HashMap;
 use std::path::{Path};
 use std::fs::File;
@@ -7,6 +5,8 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 use spinners::{Spinner, Spinners};
 use pbr::ProgressBar;
+
+use crate::utils::open_bzip;
 
 pub type WikiDumpIndices = HashMap<usize, Vec<usize>>;
 
@@ -120,11 +120,11 @@ pub fn write_indices(hs: &WikiDumpIndices, path: &Path) -> io::Result<()> {
     let out = File::create(path)?;
     let mut buf = BufWriter::with_capacity(8192 * 4, out);
     for (outer, inners) in hs.iter() {
-        write!(&mut buf, "{} ", outer);
-        inners[0..inners.len() - 1].iter().for_each(|inner| {
-            write!(&mut buf, "{},", inner);
-        });
-        writeln!(&mut buf, "{}", inners.last().unwrap());
+        write!(&mut buf, "{} ", outer)?;
+        for inner in inners[0..inners.len() - 1].iter() {
+            write!(&mut buf, "{},", inner)?;
+        }
+        writeln!(&mut buf, "{}", inners.last().unwrap())?;
     }
     Ok(())
 }

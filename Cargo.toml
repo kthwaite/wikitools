@@ -2,6 +2,7 @@
 name = "wikitools"
 version = "0.0.0"
 authors = ["cthwaite"]
+edition = "2018"
 
 [dependencies]
 bzip2 = "0.3.1"

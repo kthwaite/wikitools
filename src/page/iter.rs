@@ -1,6 +1,6 @@
-use page::Page;
 use std::io::{Read, BufReader};
 use quick_xml::{ self as qx, events::{Event} };
+use crate::page::Page;
 
 /// Iterator yielding Page objects for an XML file.
 pub struct PageIterator<R: Read> {

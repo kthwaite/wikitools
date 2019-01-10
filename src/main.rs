@@ -2,17 +2,6 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate serde_json;
-extern crate bzip2;
-extern crate config;
-extern crate fnv;
-extern crate pbr;
-extern crate quick_xml;
-extern crate rayon;
-extern crate regex;
-extern crate serde;
-extern crate spinners;
-extern crate tantivy;
-extern crate zip;
 
 mod extract;
 mod find_indices;
@@ -36,13 +25,13 @@ use tantivy::{
     directory::MmapDirectory
 };
 
-use extract::{index_anchors};
-use indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
-use redirect::write_redirects;
-use settings::Settings;
-use template::compile_templates;
-use extract::extract_with_writer;
-use page::writer::{AnchorWriterJSONL, AnchorWriterTSV};
+use crate::extract::{index_anchors};
+use crate::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
+use crate::redirect::write_redirects;
+use crate::settings::Settings;
+use crate::template::compile_templates;
+use crate::extract::extract_with_writer;
+use crate::page::writer::{AnchorWriterJSONL, AnchorWriterTSV};
 
 
 /// Build a Tantivy index from anchors in a wikipedia dump.
@@ -66,7 +55,11 @@ fn build_index(index_dir: &Path, page_indices: &WikiDumpIndices, data_dump: &Pat
     Ok((schema, index))
 }
 
-
+/// Try to create a new BufWriter with the given buffer size wrapped in a mutex.
+/// 
+/// # Arguments
+/// * `out_path` - Output path
+/// * `buf_size` - Buffer size for BufWriter
 fn mutex_bufwriter<P: AsRef<Path>>(out_path: P, buf_size: usize) -> io::Result<Mutex<BufWriter<File>>> {
     let writer = File::create(out_path)?;
     let writer = if buf_size == 0 {
@@ -93,6 +86,12 @@ fn dump_page_anchors(page_indices: &WikiDumpIndices, data_dump: &Path, out_path:
 }
 
 /// Write anchors from a Wikipedia dump to text file.
+/// 
+/// # Arguments
+/// * `indices` - Parsed Wikipedia page indices for the corresponding dump
+/// * `dump` - Path to Wikipedia dump
+/// * `out_path` - Output path
+/// * `buf_size` - Buffer size for writer
 pub fn write_anchors(indices: &WikiDumpIndices, dump: &Path, out_path: &Path, buf_size: usize) -> io::Result<()> {
     let writer = mutex_bufwriter(out_path, buf_size)?;
 
@@ -150,13 +149,13 @@ fn main() {
 
     let anchors = &settings.anchors;
     if !anchors.anchors.exists() {
-        write_anchors(&page_indices, &data.dump, &anchors.anchors)
+        write_anchors(&page_indices, &data.dump, &anchors.anchors, 4096)
             .expect("Failed to extract anchors!");
     }
 
     let index_dir = &settings.search_index.index_dir;
 
-    let (schema, index) = if !index_dir.exists() {
+    let (_schema, _index) = if !index_dir.exists() {
         build_index(index_dir, &page_indices, &data.dump, 500_000_000)
             .expect("Failed to build Index")
     } else {

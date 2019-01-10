@@ -3,15 +3,14 @@ use std::io::{self, BufRead, BufWriter, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
-use indices::WikiDumpIndices;
 use fnv::FnvHashMap;
 use pbr;
 use rayon::prelude::*;
 use tantivy::{IndexWriter, schema::*};
 
-use page::{Anchor, Page, PageIterator, PageWriter};
-use utils::open_seek_bzip;
-
+use crate::indices::WikiDumpIndices;
+use crate::page::{Anchor, Page, PageIterator, PageWriter};
+use crate::utils::open_seek_bzip;
 
 
 /// Extract a vector of Pages from the zipped store at a given index in a
@@ -20,7 +19,6 @@ fn index_to_pages(data: &Path, index: &usize) -> Vec<Page> {
     let store = open_seek_bzip(&data, *index).unwrap();
     PageIterator::new(store).collect::<Vec<_>>()
 }
-
 
 
 /// Extract anchors from a Wikipedia dump, writing them to JSON.
@@ -45,6 +43,7 @@ pub fn extract_pages_json<W: Write + Send + Sync>(indices: &WikiDumpIndices, dat
                 }
             });
 }
+
 
 /// Extract page data and write using the specified PageWriter.
 pub fn extract_with_writer<P, W>(_page_writer: P, indices: &WikiDumpIndices, data: &Path, writer: &Mutex<W>)
@@ -71,7 +70,6 @@ pub fn extract_with_writer<P, W>(_page_writer: P, indices: &WikiDumpIndices, dat
                 }
             });
 }
-
 
 
 /// Use tantivy to index anchors for each page.
@@ -119,6 +117,7 @@ pub fn index_anchors(indices: &WikiDumpIndices, data: &Path, indexer: &Mutex<Ind
                }
            });
 }
+
 
 /// Write page-page anchor counts.
 pub fn write_anchor_counts<R: BufRead>(anchors: R, out_path: &Path) -> io::Result<()> {

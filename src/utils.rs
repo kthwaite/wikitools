@@ -7,7 +7,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{self, BufRead, SeekFrom, BufReader, BufWriter, prelude::*};
 
-use indices::{read_indices, WikiDumpIndices};
+use crate::indices::WikiDumpIndices;
 
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 
@@ -109,9 +109,9 @@ impl<R: BufRead> Read for BzDecoderMulti<R> {
             }
             self.obj.consume(consumed);
 
-            let ret = try!(ret.map_err(|e| {
+            let ret = ret.map_err(|e| {
                 io::Error::new(io::ErrorKind::InvalidInput, e)
-            }));
+            })?;
             if ret == Status::StreamEnd {
                 self.done = true;
                 return Ok(read)
@@ -172,7 +172,7 @@ impl BZipMultiStream<BufReader<File>> {
 }
 
 /// Extract one file to disk.
-pub fn extract_one(indices: &WikiDumpIndices, index: usize, data: &Path, out: &str) {
+pub fn extract_one(indices: &WikiDumpIndices, index: usize, data: &Path, out: &str) -> Result<(), io::Error> {
     let mut indices = indices.keys().collect::<Vec<_>>();
     indices.sort();
     let index = indices[index];
@@ -182,6 +182,7 @@ pub fn extract_one(indices: &WikiDumpIndices, index: usize, data: &Path, out: &s
     reader.lines()
           .map(|l| l.unwrap())
           .for_each(|line| {
-            writeln!(&mut out_buf, "{}", line);
+            writeln!(&mut out_buf, "{}", line).unwrap();
           });
+    Ok(())
 }

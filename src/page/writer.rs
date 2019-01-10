@@ -1,5 +1,5 @@
 use std::io::{self, Write};
-use page::{Anchor, Page};
+use crate::page::{Anchor, Page};
 
 
 pub trait PageWriter {

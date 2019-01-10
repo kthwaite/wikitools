@@ -8,8 +8,8 @@ use pbr;
 use quick_xml::{self as qx, events::Event};
 use rayon::prelude::*;
 
-use indices::WikiDumpIndices;
-use utils::open_seek_bzip;
+use crate::indices::WikiDumpIndices;
+use crate::utils::open_seek_bzip;
 
 /// Check if a Wikipedia page title constitutes a valid redirect.
 /// Wikipedia internal pages, templates, portals and lists are all currently
@@ -116,7 +116,7 @@ pub fn write_redirects<W: Write + Send + Sync>(indices: &WikiDumpIndices, data: 
                 {
                     let mut w = writer.lock().unwrap();
                     reds.into_iter().for_each(|red| {
-                        writeln!(w, "{}\t{}", red.from, red.to);
+                        writeln!(w, "{}\t{}", red.from, red.to).unwrap();
                     });
                 }
                 {

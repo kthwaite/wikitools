@@ -1,5 +1,5 @@
-use page::category::Category;
-use page::anchor::Anchor;
+use crate::page::category::Category;
+use crate::page::anchor::Anchor;
 
 
 /// Collection of Anchors and Categories for a Wikipedia page.

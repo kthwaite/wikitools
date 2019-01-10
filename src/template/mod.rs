@@ -15,8 +15,8 @@ use std::sync::Mutex;
 use pbr::ProgressBar;
 use rayon::prelude::*;
 
-use indices::WikiDumpIndices;
-use utils::open_seek_bzip;
+use crate::indices::WikiDumpIndices;
+use crate::utils::open_seek_bzip;
 
 
 /// Fetch templates from a Wikipedia dump, writing them to file.

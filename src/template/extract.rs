@@ -2,7 +2,7 @@ use std::io::BufRead;
 
 use quick_xml as qx;
 
-use template::writer::TemplateWriter;
+use crate::template::writer::TemplateWriter;
 
 
 /// Extract templates from a stream and pass them to a TemplateWriter.
@@ -43,7 +43,7 @@ pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {
                 if let b"page" = tag.name() {
                    in_page = false;
                    if in_template {
-                       writer.write_template(title, page);
+                       writer.write_template(title, page).unwrap();
                        title = String::new();
                        page = String::new();
                    }
