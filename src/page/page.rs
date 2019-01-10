@@ -1,6 +1,5 @@
-use crate::page::category::Category;
 use crate::page::anchor::Anchor;
-
+use crate::page::category::Category;
 
 /// Collection of Anchors and Categories for a Wikipedia page.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -8,7 +7,7 @@ pub struct Page {
     pub title: String,
     pub id: String,
     pub anchors: Vec<Anchor>,
-    pub categories: Vec<Category>
+    pub categories: Vec<Category>,
 }
 
 impl Page {
@@ -19,7 +18,7 @@ impl Page {
             title,
             id,
             anchors: Page::extract_anchors(&page),
-            categories: Page::extract_categories(&page)
+            categories: Page::extract_categories(&page),
         }
     }
 
@@ -28,18 +27,18 @@ impl Page {
     pub fn extract_categories(page: &str) -> Vec<Category> {
         let page = match page.rfind("==References==") {
             Some(index) => &page[index..],
-            None => page
+            None => page,
         };
         page.match_indices("[[")
             .filter_map(|(begin, _)| {
                 let initial = &page[begin + 2..];
                 if initial.starts_with("Category:") {
-                    return initial.find("]]").and_then(|end| {
-                        match initial[..end].find('|') {
+                    return initial
+                        .find("]]")
+                        .and_then(|end| match initial[..end].find('|') {
                             Some(actual_end) => Some(&initial[9..actual_end]),
-                            None => Some(&initial[9..end])
-                        }
-                    })
+                            None => Some(&initial[9..end]),
+                        });
                 }
                 None
             })
@@ -51,7 +50,7 @@ impl Page {
     pub fn extract_anchors(page: &str) -> Vec<Anchor> {
         let page = match page.rfind("==References==") {
             Some(index) => &page[..index],
-            None => page
+            None => page,
         };
         page.match_indices("[[")
             .filter_map(|(begin, _)| Anchor::pare_anchor_match(page, begin))

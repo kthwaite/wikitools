@@ -1,6 +1,6 @@
-use std::io::{Read, BufReader};
-use quick_xml::{ self as qx, events::{Event} };
 use crate::page::Page;
+use quick_xml::{self as qx, events::Event};
+use std::io::{BufReader, Read};
 
 /// Iterator yielding Page objects for an XML file.
 pub struct PageIterator<R: Read> {
@@ -11,8 +11,6 @@ pub struct PageIterator<R: Read> {
     id: String,
 }
 
-
-
 impl<R: Read> PageIterator<R> {
     pub fn new(xml_stream: BufReader<R>) -> Self {
         PageIterator {
@@ -20,7 +18,7 @@ impl<R: Read> PageIterator<R> {
             buf: vec![],
             page_buf: vec![],
             title: String::new(),
-            id: String::new()
+            id: String::new(),
         }
     }
 
@@ -42,24 +40,20 @@ impl<R: Read> Iterator for PageIterator<R> {
             Text,
             Title,
             Redirect,
-            None
+            None,
         }
         loop {
             let action = {
                 match self.reader.read_event(&mut self.buf) {
-                    Ok(Event::Start(ref tag)) => {
-                        match tag.name() {
-                            b"text" => Tag::Text,
-                            b"id" => Tag::Id,
-                            b"title" => Tag::Title,
-                            _ => Tag::None
-                        }
+                    Ok(Event::Start(ref tag)) => match tag.name() {
+                        b"text" => Tag::Text,
+                        b"id" => Tag::Id,
+                        b"title" => Tag::Title,
+                        _ => Tag::None,
                     },
-                    Ok(Event::Empty(ref tag)) => {
-                        match tag.name() {
-                            b"redirect" => Tag::Redirect,
-                            _ => Tag::None
-                        }
+                    Ok(Event::Empty(ref tag)) => match tag.name() {
+                        b"redirect" => Tag::Redirect,
+                        _ => Tag::None,
                     },
                     Ok(Event::Eof) => break,
                     Ok(_) => Tag::None,
@@ -71,8 +65,10 @@ impl<R: Read> Iterator for PageIterator<R> {
                 Tag::Title => self.extract_title(),
                 Tag::Redirect => {
                     // Skip over redirects; these are handled separately.
-                    self.reader.read_to_end(b"page", &mut self.page_buf).unwrap();
-                },
+                    self.reader
+                        .read_to_end(b"page", &mut self.page_buf)
+                        .unwrap();
+                }
                 Tag::Text => {
                     // Don't skip Portal pages for now.
                     // Skip over files.
@@ -80,17 +76,18 @@ impl<R: Read> Iterator for PageIterator<R> {
                     // Skip over templates.
                     || self.title.starts_with("Template:")
                     // Skip over Wikipedia internal pages.
-                    || self.title.starts_with("Wikipedia:") {
+                    || self.title.starts_with("Wikipedia:")
+                    {
                         continue;
                     }
                     match self.reader.read_text(b"text", &mut self.page_buf) {
                         Ok(page) => {
                             return Some(Page::new(self.title.clone(), self.id.clone(), &page))
-                        },
+                        }
                         Err(_) => return None,
                     }
-                },
-                _ => ()
+                }
+                _ => (),
             }
         }
         None

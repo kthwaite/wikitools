@@ -5,16 +5,12 @@ lazy_static! {
     static ref EXT_LINK : Regex = Regex::new("^[A-Za-z]+:").unwrap();
 }
 
-
 /// Wikipedia anchor, representing a link between pages, optionally with a
 /// surface realisation.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Anchor {
     Direct(String),
-    Label{
-        surface: String,
-        page: String
-    }
+    Label { surface: String, page: String },
 }
 
 impl Anchor {
@@ -23,14 +19,17 @@ impl Anchor {
         match anchor.find('|') {
             Some(index) => {
                 let page = anchor[..index].to_owned();
-                let surface = anchor[index+1..].trim();
+                let surface = anchor[index + 1..].trim();
                 if surface.is_empty() {
                     Anchor::Direct(page)
                 } else {
-                    Anchor::Label{page, surface: surface.to_owned()}
+                    Anchor::Label {
+                        page,
+                        surface: surface.to_owned(),
+                    }
                 }
-            },
-            None => Anchor::Direct(anchor.to_owned())
+            }
+            None => Anchor::Direct(anchor.to_owned()),
         }
     }
 
@@ -44,9 +43,9 @@ impl Anchor {
         if EXT_LINK.is_match(initial) {
             return None;
         }
-        page[begin..].find("]]").and_then(|end| {
-            Some(&page[begin + 2..begin + end])
-        })
+        page[begin..]
+            .find("]]")
+            .and_then(|end| Some(&page[begin + 2..begin + end]))
     }
 
     /// Check if an anchor string points to a file.
