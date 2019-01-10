@@ -3,13 +3,13 @@ pub mod template;
 pub mod writer;
 
 pub use self::{
-    template::Template,
     extract::extract_templates,
+    template::Template,
     writer::{FileTemplateWriter, TemplateWriter},
 };
 
-use std::path::Path;
 use std::fs::File;
+use std::path::Path;
 use std::sync::Mutex;
 
 use pbr::ProgressBar;
@@ -17,7 +17,6 @@ use rayon::prelude::*;
 
 use crate::indices::WikiDumpIndices;
 use crate::utils::open_seek_bzip;
-
 
 /// Fetch templates from a Wikipedia dump, writing them to file.
 ///
@@ -40,17 +39,15 @@ pub fn compile_templates(indices: &WikiDumpIndices, data: &Path, output_path: &P
     let out_file = File::create(output_path).unwrap();
     let ftw = FileTemplateWriter::new(out_file);
 
-    idx.into_par_iter()
-       .for_each(|index| {
-            let dx = open_seek_bzip(&data, index).unwrap();
-            extract_templates(dx, &ftw);
-            {
-                let mut prog = pbar.lock().unwrap();
-                prog.inc();
-            }
-       });
+    idx.into_par_iter().for_each(|index| {
+        let dx = open_seek_bzip(&data, index).unwrap();
+        extract_templates(dx, &ftw);
+        {
+            let mut prog = pbar.lock().unwrap();
+            prog.inc();
+        }
+    });
 }
-
 
 #[cfg(test)]
 mod test {
@@ -60,7 +57,7 @@ mod test {
 
     #[derive(Clone, Debug, Default)]
     struct TestTemplateWriter {
-        pub templates: RefCell<Vec<Template>>
+        pub templates: RefCell<Vec<Template>>,
     }
 
     impl TemplateWriter for TestTemplateWriter {
@@ -68,7 +65,6 @@ mod test {
             self.templates.borrow_mut().push(template);
         }
     }
-
 
     #[test]
     fn test_extraction() {
