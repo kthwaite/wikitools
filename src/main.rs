@@ -31,6 +31,7 @@ use crate::page::writer::{AnchorWriterJSONL, AnchorWriterTSV};
 use crate::redirect::write_redirects;
 use crate::settings::Settings;
 use crate::template::compile_templates;
+use crate::utils::mutex_bufwriter;
 
 /// Build a Tantivy index from anchors in a wikipedia dump.
 fn build_index(

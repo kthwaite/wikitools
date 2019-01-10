@@ -2,6 +2,7 @@ use bzip2::{read::BzDecoder, Decompress, Status};
 use std::fs::File;
 use std::io::{self, prelude::*, BufRead, BufReader, BufWriter, SeekFrom};
 use std::path::Path;
+use std::sync::Mutex;
 
 use crate::indices::WikiDumpIndices;
 
@@ -176,4 +177,23 @@ pub fn extract_one(
         writeln!(&mut out_buf, "{}", line).unwrap();
     });
     Ok(())
+}
+
+
+/// Try to create a new BufWriter with the given buffer size wrapped in a mutex.
+///
+/// # Arguments
+/// * `out_path` - Output path
+/// * `buf_size` - Buffer size for BufWriter
+pub fn mutex_bufwriter<P: AsRef<Path>>(
+    out_path: P,
+    buf_size: usize,
+) -> io::Result<Mutex<BufWriter<File>>> {
+    let writer = File::create(out_path)?;
+    let writer = if buf_size == 0 {
+        BufWriter::new(writer)
+    } else {
+        BufWriter::with_capacity(buf_size, writer)
+    };
+    Ok(Mutex::new(writer))
 }
