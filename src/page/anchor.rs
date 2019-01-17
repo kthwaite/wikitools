@@ -1,4 +1,7 @@
+use lazy_static::lazy_static;
 use regex::Regex;
+use serde_derive::{Deserialize, Serialize};
+
 
 lazy_static! {
     /// Check if a wikipedia anchor links to an external resource.

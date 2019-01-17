@@ -1,3 +1,6 @@
+use serde_derive::{Deserialize, Serialize};
+
+
 /// Wikipedia category label.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Category(pub String);

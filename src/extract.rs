@@ -1,4 +1,4 @@
-use std::io::{Write};
+use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -8,7 +8,8 @@ use tantivy::{schema::*, IndexWriter};
 
 use crate::indices::WikiDumpIndices;
 use crate::page::{Anchor, Page, PageIterator, PageWriter};
-use crate::utils::{open_seek_bzip};
+use crate::utils::open_seek_bzip;
+
 
 /// Extract a vector of Pages from the zipped store at a given index in a
 /// Wikipedia dump.

@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use pbr;
 use quick_xml::{self as qx, events::Event};
 use rayon::prelude::*;
+use serde_derive::{Deserialize, Serialize};
 
 use crate::indices::WikiDumpIndices;
 use crate::utils::open_seek_bzip;

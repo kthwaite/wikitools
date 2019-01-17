@@ -1,10 +1,12 @@
-use bzip2::{read::BzDecoder, Decompress, Status};
 use std::fs::File;
 use std::io::{self, prelude::*, BufRead, BufReader, BufWriter, SeekFrom};
 use std::path::Path;
 use std::sync::Mutex;
 
+use bzip2::{read::BzDecoder, Decompress, Status};
+
 use crate::indices::WikiDumpIndices;
+
 
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 

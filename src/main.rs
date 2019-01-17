@@ -1,10 +1,4 @@
 #![allow(dead_code)]
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate serde_json;
 
 mod extract;
 mod find_indices;
@@ -16,8 +10,8 @@ mod surface_forms;
 mod template;
 mod utils;
 
-use std::io::{self, BufWriter, Write};
 use std::fs::File;
+use std::io::{self, BufWriter};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -25,7 +19,7 @@ use tantivy::{
     collector::TopCollector, directory::MmapDirectory, query::QueryParser, schema::*, Index,
 };
 
-use crate::extract::{index_anchors, extract_with_writer};
+use crate::extract::{extract_with_writer, index_anchors};
 use crate::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
 use crate::page::writer::{AnchorWriterJSONL, AnchorWriterTSV};
 use crate::redirect::write_redirects;
