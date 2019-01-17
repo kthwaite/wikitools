@@ -49,10 +49,10 @@ impl PageWriter for AnchorWriterTSV {
         for anchor in item.anchors {
             match anchor {
                 Anchor::Direct(name) => {
-                    writeln!(writer, "{}\t{}\t{}\t{}", item.id, item.title, name, name).unwrap();
+                    writeln!(writer, "{}\t{}\t{}\t{}", item.id, item.title, name, name)?;
                 }
                 Anchor::Label { surface, page } => {
-                    writeln!(writer, "{}\t{}\t{}\t{}", item.id, item.title, surface, page).unwrap();
+                    writeln!(writer, "{}\t{}\t{}\t{}", item.id, item.title, surface, page)?;
                 }
             }
         }
