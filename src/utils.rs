@@ -197,3 +197,49 @@ pub fn mutex_bufwriter<P: AsRef<Path>>(
     };
     Ok(Mutex::new(writer))
 }
+
+
+/// Bisect a buffer between the given start and end bounds.
+pub fn bisect_buffer_with_bounds<R: BufRead + Seek>(buf: &mut R, with_start: u64, with_end: u64) -> io::Result<u64> {
+    assert!(with_end > with_start);
+    let bisector = (with_end - with_start) / 2;
+    buf.seek(SeekFrom::Start(with_start))?;
+    buf.seek(SeekFrom::Current(bisector as i64))?;
+    let mut linebuf = vec![];
+    let idx = buf.read_until(b'\n', &mut linebuf)?;
+    Ok(bisector + idx as u64)
+}
+
+/// Recursively bisect the buffer to the target size between the given start and end.
+fn bisect_buffer_recursive_impl<R: BufRead + Seek>(buf: &mut R, curr: &mut Vec<(u64, u64)>, target_size: u64, start: u64, end: u64) -> io::Result<()> {
+    if end - start <= target_size {
+        curr.push((start, end));
+        return Ok(());
+    }
+    let bisector = bisect_buffer_with_bounds(buf, start, end)?;
+    if ((end - bisector) <= target_size) || ((bisector - start) <= target_size) {
+        curr.push((start, bisector));
+        curr.push((bisector, end));
+        return Ok(());
+    }
+    bisect_buffer_recursive_impl(buf, curr, target_size, start, start + bisector)?;
+    bisect_buffer_recursive_impl(buf, curr, target_size, start + bisector, end)?;
+    Ok(())
+}
+
+/// Recursively bisect a buffer until the chunk size reaches a given boundary.
+pub fn bisect_buffer_recursive<R: BufRead + Seek>(buf: &mut R, target_size: u64) -> io::Result<Vec<(u64, u64)>> {
+    let end = buf.seek(SeekFrom::End(0))?;
+    let cap = (end / target_size) as usize;
+    let mut curr = Vec::with_capacity(cap);
+    bisect_buffer_recursive_impl(buf, &mut curr, target_size, 0, end)?;
+    Ok(curr)
+}
+
+/// Split a file into chunks not smaller than a given length, returning byte indices
+/// for the start and end of each chunk.
+pub fn chunk_file<P: AsRef<Path>>(file: P, chunk_len: u64) -> io::Result<Vec<(u64, u64)>> {
+    let file = File::open(file)?;
+    let mut file = BufReader::new(file);
+    bisect_buffer_recursive(&mut file, chunk_len)
+}
