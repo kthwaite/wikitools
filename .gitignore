@@ -74,3 +74,4 @@ template_indices
 *.bz2
 *.bin
 *.py
+anchors-*
