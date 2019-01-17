@@ -12,11 +12,12 @@ mod indices;
 mod page;
 mod redirect;
 mod settings;
+mod surface_forms;
 mod template;
 mod utils;
 
+use std::io::{self, BufWriter, Write};
 use std::fs::File;
-use std::io::{self, BufWriter};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -24,11 +25,12 @@ use tantivy::{
     collector::TopCollector, directory::MmapDirectory, query::QueryParser, schema::*, Index,
 };
 
-use crate::extract::{index_anchors, extract_with_writer, extract_anchor_counts};
+use crate::extract::{index_anchors, extract_with_writer};
 use crate::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
 use crate::page::writer::{AnchorWriterJSONL, AnchorWriterTSV};
 use crate::redirect::write_redirects;
 use crate::settings::Settings;
+use crate::surface_forms::{extract_anchor_counts_from_anchors, write_anchor_counts};
 use crate::template::compile_templates;
 use crate::utils::mutex_bufwriter;
 
@@ -57,24 +59,6 @@ fn build_index(
         .commit()
         .unwrap();
     Ok((schema, index))
-}
-
-/// Try to create a new BufWriter with the given buffer size wrapped in a mutex.
-///
-/// # Arguments
-/// * `out_path` - Output path
-/// * `buf_size` - Buffer size for BufWriter
-fn mutex_bufwriter<P: AsRef<Path>>(
-    out_path: P,
-    buf_size: usize,
-) -> io::Result<Mutex<BufWriter<File>>> {
-    let writer = File::create(out_path)?;
-    let writer = if buf_size == 0 {
-        BufWriter::new(writer)
-    } else {
-        BufWriter::with_capacity(buf_size, writer)
-    };
-    Ok(Mutex::new(writer))
 }
 
 /// Dump a list of redirects to file as tab-separated pairs.
@@ -145,8 +129,8 @@ fn one_query(index: &Index, schema: &Schema, query: &str) {
     }
 }
 
-fn main() {
-    let settings = Settings::new("config.toml").unwrap();
+fn main() -> Result<(), Box<std::error::Error>> {
+    let settings = Settings::new("config.toml")?;
 
     println!("settings: {:#?}", settings);
 
@@ -156,7 +140,7 @@ fn main() {
         if !indices.pages.exists() {
             write_all_indices(&data.index, &indices.pages);
         }
-        read_indices(&indices.pages).unwrap()
+        read_indices(&indices.pages)?
     };
 
     if !indices.templates.exists() {
@@ -164,7 +148,7 @@ fn main() {
     }
 
     if !settings.templates.exists() {
-        let template_indices = read_indices(&indices.templates).unwrap();
+        let template_indices = read_indices(&indices.templates)?;
         compile_templates(&template_indices, &data.dump, &settings.templates);
     };
 
@@ -174,28 +158,11 @@ fn main() {
             .expect("Failed to extract anchors!");
     }
 
-
-    let anchor_counts = extract_anchor_counts(&page_indices, &data.dump);
-    let out_file = File::open("anchor-counts-2019-01-10").unwrap();
-    let mut writer = BufWriter::with_capacity(4096, out_file);
-    let mut prog_bar = pbr::ProgressBar::new(anchor_counts.len() as u64);
-    use std::io::Write;
-    for (surface_form, entities) in anchor_counts {
-        for (entity, count) in entities {
-            writeln!(writer, "{}\t{}\t{}", surface_form, entity, count).unwrap();
-        }
-        prog_bar.inc();
+    if !anchors.anchor_counts.exists() {
+        let anchor_counts = extract_anchor_counts_from_anchors("anchors-2019-01-10", None)?;
+        let file = File::create("anchor-counts-2019-01-17")?;
+        let mut file = BufWriter::with_capacity(8192 * 1024, file);
+        write_anchor_counts(anchor_counts, &mut file);
     }
-    
-    /*
-    let index_dir = &settings.search_index.index_dir;
-
-    let (_schema, _index) = if !index_dir.exists() {
-        build_index(index_dir, &page_indices, &data.dump, 500_000_000)
-            .expect("Failed to build Index")
-    } else {
-        let dir = MmapDirectory::open(&index_dir).unwrap();
-        let index = Index::open(dir).expect("Failed to load Index");
-        (index.schema(), index)
-    };
+    Ok(())
 }
