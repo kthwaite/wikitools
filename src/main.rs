@@ -130,19 +130,25 @@ fn main() -> Result<(), Box<std::error::Error>> {
 
     let (data, indices) = (&settings.data, &settings.indices);
 
+    // Fetch all page indices, writing to file if they do not already exist.
     let page_indices = {
         if !indices.pages.exists() {
-            write_all_indices(&data.index, &indices.pages);
+            write_all_indices(&data.index, &indices.pages)?
+        } else {
+            read_indices(&indices.pages)?
         }
-        read_indices(&indices.pages)?
     };
 
-    if !indices.templates.exists() {
-        write_template_indices(&data.index, &indices.templates);
-    }
+    // Fetch all template indices, writing to file if they do not already exist.
+    let template_indices = {
+        if !indices.templates.exists() {
+            write_template_indices(&data.index, &indices.templates)?
+        } else {
+            read_indices(&indices.templates)?
+        }
+    };
 
     if !settings.templates.exists() {
-        let template_indices = read_indices(&indices.templates)?;
         compile_templates(&template_indices, &data.dump, &settings.templates);
     };
 
