@@ -3,18 +3,19 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
+use fnv::FnvHashMap;
 use pbr::ProgressBar;
 use spinners::{Spinner, Spinners};
 
 use crate::utils::open_bzip;
 
-pub type WikiDumpIndices = HashMap<usize, Vec<usize>>;
+pub type WikiDumpIndices = FnvHashMap<usize, Vec<usize>>;
 
 /// Find template indices in an index file.
 pub fn find_template_indices(path: &Path) -> io::Result<WikiDumpIndices> {
     let buf = open_bzip(path)?;
 
-    let mut hm: HashMap<usize, Vec<usize>> = HashMap::default();
+    let mut hm: WikiDumpIndices = WikiDumpIndices::default();
 
     let spinner = Spinner::new(Spinners::Dots, "Finding templates...".to_owned());
     let lines = buf
@@ -64,8 +65,6 @@ pub fn write_title_pageids<R: BufRead, W: Write>(indices: R, writer: &mut W) -> 
 pub fn build_indices_map(path: &Path) -> io::Result<WikiDumpIndices> {
     let indices = open_bzip(path)?;
 
-    let hm: WikiDumpIndices = HashMap::default();
-
     let mut counter = 0;
 
     let hm = indices
@@ -81,7 +80,7 @@ pub fn build_indices_map(path: &Path) -> io::Result<WikiDumpIndices> {
             }
             (outer, inner)
         })
-        .fold(hm, |mut hm, (o, i)| {
+        .fold(WikiDumpIndices::default(), |mut hm, (o, i)| {
             hm.entry(o).or_insert_with(Vec::new).push(i);
             hm
         });
@@ -92,7 +91,7 @@ pub fn build_indices_map(path: &Path) -> io::Result<WikiDumpIndices> {
 pub fn read_indices(path: &Path) -> io::Result<WikiDumpIndices> {
     let file = File::open(path)?;
     let buf = BufReader::new(file);
-    let hm: HashMap<usize, Vec<usize>> = HashMap::default();
+    let hm = WikiDumpIndices::default();
     let hm = buf
         .lines()
         .map(|line| line.unwrap())
@@ -127,15 +126,15 @@ pub fn write_indices(hs: &WikiDumpIndices, path: &Path) -> io::Result<()> {
 }
 
 /// Fetch and write the indices of each Template.
-pub fn write_template_indices(index: &Path, output: &Path) -> WikiDumpIndices {
-    let hx = find_template_indices(index).unwrap();
-    write_indices(&hx, output).unwrap();
-    hx
+pub fn write_template_indices(index: &Path, output: &Path) -> io::Result<WikiDumpIndices> {
+    let hx = find_template_indices(index)?;
+    write_indices(&hx, output)?;
+    Ok(hx)
 }
 
 /// Fetch and write all indices.
-pub fn write_all_indices(index: &Path, out_path: &Path) -> WikiDumpIndices {
-    let hx = build_indices_map(index).unwrap();
-    write_indices(&hx, out_path).unwrap();
-    hx
+pub fn write_all_indices(index: &Path, out_path: &Path) -> io::Result<WikiDumpIndices> {
+    let hx = build_indices_map(index)?;
+    write_indices(&hx, out_path)?;
+    Ok(hx)
 }
