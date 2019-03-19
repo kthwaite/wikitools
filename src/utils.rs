@@ -7,7 +7,6 @@ use bzip2::{read::BzDecoder, Decompress, Status};
 
 use crate::indices::WikiDumpIndices;
 
-
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 
 /// Create a bzip2 BufReader from a File handle.
@@ -202,7 +201,11 @@ pub fn mutex_bufwriter<P: AsRef<Path>>(
 
 
 /// Bisect a buffer between the given start and end bounds.
-pub fn bisect_buffer_with_bounds<R: BufRead + Seek>(buf: &mut R, with_start: u64, with_end: u64) -> io::Result<u64> {
+pub fn bisect_buffer_with_bounds<R: BufRead + Seek>(
+    buf: &mut R,
+    with_start: u64,
+    with_end: u64,
+) -> io::Result<u64> {
     assert!(with_end > with_start);
     let bisector = (with_end - with_start) / 2;
     buf.seek(SeekFrom::Start(with_start))?;
@@ -213,7 +216,13 @@ pub fn bisect_buffer_with_bounds<R: BufRead + Seek>(buf: &mut R, with_start: u64
 }
 
 /// Recursively bisect the buffer to the target size between the given start and end.
-fn bisect_buffer_recursive_impl<R: BufRead + Seek>(buf: &mut R, curr: &mut Vec<(u64, u64)>, target_size: u64, start: u64, end: u64) -> io::Result<()> {
+fn bisect_buffer_recursive_impl<R: BufRead + Seek>(
+    buf: &mut R,
+    curr: &mut Vec<(u64, u64)>,
+    target_size: u64,
+    start: u64,
+    end: u64,
+) -> io::Result<()> {
     if end - start <= target_size {
         curr.push((start, end));
         return Ok(());
@@ -230,7 +239,10 @@ fn bisect_buffer_recursive_impl<R: BufRead + Seek>(buf: &mut R, curr: &mut Vec<(
 }
 
 /// Recursively bisect a buffer until the chunk size reaches a given boundary.
-pub fn bisect_buffer_recursive<R: BufRead + Seek>(buf: &mut R, target_size: u64) -> io::Result<Vec<(u64, u64)>> {
+pub fn bisect_buffer_recursive<R: BufRead + Seek>(
+    buf: &mut R,
+    target_size: u64,
+) -> io::Result<Vec<(u64, u64)>> {
     let end = buf.seek(SeekFrom::End(0))?;
     let cap = (end / target_size) as usize;
     let mut curr = Vec::with_capacity(cap);
