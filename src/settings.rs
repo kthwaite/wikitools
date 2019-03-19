@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
 use config::{Config, ConfigError, File};
-use serde_derive::{Deserialize, Serialize};
-
+use serde::{Deserialize, Serialize};
 
 /// Configuration for Wikipedia data sources.
 #[derive(Clone, Debug, Deserialize, Serialize)]

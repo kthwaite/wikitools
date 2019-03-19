@@ -1,5 +1,4 @@
-use serde_derive::{Deserialize, Serialize};
-
+use serde::{Deserialize, Serialize};
 
 /// Wikipedia category label.
 #[derive(Clone, Debug, Deserialize, Serialize)]
