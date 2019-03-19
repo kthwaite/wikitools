@@ -4,6 +4,12 @@ version = "0.0.0"
 authors = ["cthwaite"]
 edition = "2018"
 
+
+[workspace]
+members = [
+    "storage",
+]
+
 [dependencies]
 bzip2 = "0.3.1"
 config = "0.9"
