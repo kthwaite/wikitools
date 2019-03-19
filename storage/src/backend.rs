@@ -1,6 +1,6 @@
-use crate::doc::Doc;
+use crate::surface_form::SurfaceForm;
 
 pub trait StorageBackend {
-    fn find_by_id(&self, _doc_id: &str) -> Option<Doc> { None }
-    fn get_doc(&self, _doc_id: &str) -> Option<Doc> { None }
+    /// Fetch a surface form document from the backend.
+    fn get_doc(&self, _sf_id: &str) -> Option<SurfaceForm> { None }
 }

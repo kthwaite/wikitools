@@ -2,18 +2,18 @@ use bincode::{serialize, deserialize};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Document
+/// 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct Doc {
-    /// Page title.
+pub struct SurfaceForm {
+    /// Surface form.
     pub id: String,
-    /// Map of anchors to counts.
+    /// Map of page titles to counts.
     pub anchor: HashMap<String, usize>,
 }
 
-impl Doc {
+impl SurfaceForm {
     pub fn new(id: &str) -> Self {
-        Doc {
+        SurfaceForm {
             id: id.to_owned(),
             anchor: HashMap::default(),
         }
@@ -35,10 +35,10 @@ mod test {
     #[test]
     fn test_serialise_deserialise() {
 
-        let doc = Doc::new("Persuasion");
+        let doc = SurfaceForm::new("Persuasion");
         let bx = doc.to_bytes();
         assert_eq!(bx.len(), 26);
-        let doc2 = Doc::from_bytes(&bx);
+        let doc2 = SurfaceForm::from_bytes(&bx);
         assert_eq!(doc2.id, "Persuasion");
     }
 }
