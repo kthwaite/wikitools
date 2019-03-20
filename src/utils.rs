@@ -2,8 +2,10 @@ use std::fs::File;
 use std::io::{self, prelude::*, BufRead, BufReader, BufWriter, SeekFrom};
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use bzip2::{read::BzDecoder, Decompress, Status};
+use log::{info, trace};
 
 use crate::indices::WikiDumpIndices;
 
@@ -273,4 +275,29 @@ pub fn chunk_file<P: AsRef<Path>>(file: P, chunk_len: u64) -> io::Result<Vec<(u6
     let file = File::open(file)?;
     let mut buf = BufReader::new(file);
     bisect_buffer_recursive(&mut buf, chunk_len)
+}
+
+/// Simple timer for logging task duration.
+pub struct Timer {
+    start: Instant
+}
+
+impl Timer {
+    /// Create a new Timer.
+    pub fn new() -> Self {
+        Timer {
+            start: Instant::now()
+        }
+    }
+
+    /// Print the time since the timer was last reset, then reset the timer.
+    pub fn finish(&mut self) {
+        info!("Done in {} seconds", self.start.elapsed().as_secs());
+        self.reset();
+    }
+
+    /// Reset the timer.
+    pub fn reset(&mut self) {
+        self.start = Instant::now();
+    }
 }
