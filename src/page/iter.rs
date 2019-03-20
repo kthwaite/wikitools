@@ -97,12 +97,44 @@ impl<R: Read> Iterator for PageIterator<R> {
                     }
                     match self.reader.read_text(b"text", &mut self.page_buf) {
                         Ok(page) => {
-                            return Some(Page::new(self.title.clone(), self.id.clone(), &page))
+
+
+/// Iterator yielding String for each page in an XML file.
+pub struct RawPageIterator<R: Read>(pub PageIterator<R>);
+
+impl<R: Read> Iterator for RawPageIterator<R> {
+    type Item = String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+
+        loop {
+            match self.0.reader.read_event(&mut self.0.buf) {
+                Ok(Event::Start(ref tag)) => match tag.name() {
+                    b"text" => {
+                        if self.0.is_filtered_title()
+                        {
+                            continue;
                         }
-                        Err(_) => return None,
+                        match self.0.reader.read_text(b"text", &mut self.0.page_buf) {
+                            Ok(page) => {
+                                return Some(page);
+                            }
+                            Err(_) => return None,
+                        }
                     }
-                }
-                _ => (),
+                    _ => (),
+                },
+                Ok(Event::Empty(ref tag)) => match tag.name() {
+                    b"redirect" => {
+                        self.0.reader
+                            .read_to_end(b"page", &mut self.0.page_buf)
+                            .unwrap();
+                    },
+                    _ => (),
+                },
+                Ok(Event::Eof) => break,
+                Ok(_) => (),
+                Err(_) => break,
             }
         }
         None
