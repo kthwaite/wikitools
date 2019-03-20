@@ -39,7 +39,12 @@ impl Anchor {
                     }
                 }
             }
-            None => Anchor::Direct(anchor.trim().to_owned()),
+            None => {
+                match anchor.find('#') {
+                    None => Anchor::Direct(anchor.trim().to_owned()),
+                    Some(index) => Anchor::Direct(anchor.trim()[..index].to_owned()),
+                }
+            }
         }
     }
 
