@@ -95,6 +95,12 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_anchor_lowercases_labels() {
+        let anchor = Anchor::parse("  page");
+        assert_eq!(anchor, Anchor::Direct("page".to_owned()));
+    }
+
+    #[test]
     fn test_direct_anchor_trims_whitespace() {
         let anchor = Anchor::parse("  page");
         assert_eq!(anchor, Anchor::Direct("page".to_owned()));
@@ -103,6 +109,17 @@ mod test {
     #[test]
     fn test_label_anchor_trims_whitespace() {
         let anchor = Anchor::parse("  page  | label  ");
+        assert_eq!(anchor, Anchor::Label{
+            surface: "label".to_owned(),
+            page: "page".to_owned(),
+        });
+    }
+
+    #[test]
+    fn test_anchor_trims_page_anchor() {
+        let anchor = Anchor::parse("page#anchor");
+        assert_eq!(anchor, Anchor::Direct("page".to_owned()));
+        let anchor = Anchor::parse("page#anchor| label  ");
         assert_eq!(anchor, Anchor::Label{
             surface: "label".to_owned(),
             page: "page".to_owned(),
