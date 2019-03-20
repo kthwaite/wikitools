@@ -31,7 +31,7 @@ impl Anchor {
                     }
                 }
             }
-            None => Anchor::Direct(anchor.to_owned()),
+            None => Anchor::Direct(anchor.trim().to_owned()),
         }
     }
 
