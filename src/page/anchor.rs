@@ -24,8 +24,12 @@ impl Anchor {
     pub fn parse(anchor: &str) -> Self {
         match anchor.find('|') {
             Some(index) => {
-                let page = anchor[..index].trim().to_owned();
-                let surface = anchor[index + 1..].trim();
+                let page = anchor[..index].trim();
+                let page = match page.find('#') {
+                    None => page.to_owned(),
+                    Some(index) => page[..index].to_owned(),
+                };
+                let surface = anchor[index + 1..].trim().trim_matches('\'');
                 if surface.is_empty() {
                     Anchor::Direct(page)
                 } else {
