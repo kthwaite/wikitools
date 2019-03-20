@@ -31,31 +31,27 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
-    let schema = schema_builder.build();
-    let index = Index::create_in_dir(&index_dir, schema.clone()).unwrap();
-
-    let index_writer = index.writer(buf_size)?;
-    let index_writer = Mutex::new(index_writer);
-
-    index_anchors(page_indices, data_dump, &index_writer, &schema);
-    index_writer
-        .into_inner()
-        .expect("Failed to unwrap IndexWriter")
-        .commit()
-        .unwrap();
-    Ok((schema, index))
+fn build_or_load_page_indices(settings: &Settings) -> io::Result<WikiDumpIndices> {
+    if !settings.indices.pages.exists() {
+        info!("Building page indices");
+        write_all_indices(&settings.data.index, &settings.indices.pages)
+    } else {
+        info!("Loading page indices from {:?}", settings.indices.pages);
+        read_indices(&settings.indices.pages)
+    }
 }
 
-/// Dump a list of redirects to file as tab-separated pairs.
-fn dump_redirects(
-    page_indices: &WikiDumpIndices,
-    data_dump: &Path,
-    out_path: &Path,
-    buf_size: usize,
-) -> io::Result<()> {
-    let writer = mutex_bufwriter(out_path, buf_size)?;
-    write_redirects(&page_indices, &data_dump, &writer);
-    Ok(())
+fn build_or_load_template_indices(settings: &Settings) -> io::Result<WikiDumpIndices> {
+    if !settings.indices.templates.exists() {
+        info!("Building template indices");
+        write_template_indices(&settings.data.index, &settings.indices.templates)
+    } else {
+        info!(
+            "Loading template indices from {:?}",
+            settings.indices.templates
+        );
+        read_indices(&settings.indices.templates)
+    }
 }
 
 /// Serialize a Trie into a .qpt binary file.
