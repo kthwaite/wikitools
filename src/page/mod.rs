@@ -4,4 +4,9 @@ pub mod iter;
 pub mod page;
 pub mod writer;
 
-pub use self::{anchor::Anchor, iter::{RawPageIterator, PageIterator}, page::Page, writer::PageWriter};
+pub use self::{
+    anchor::Anchor,
+    iter::{PageIterator, RawPageIterator},
+    page::Page,
+    writer::PageWriter,
+};

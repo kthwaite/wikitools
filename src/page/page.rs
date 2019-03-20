@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::page::category::Category;
 use crate::page::anchor::Anchor;
+use crate::page::category::Category;
 
 /// Collection of Anchors and Categories for a Wikipedia page.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

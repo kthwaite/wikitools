@@ -59,6 +59,7 @@ impl PageWriter for AnchorWriterTSV {
         Ok(())
     }
 }
+
 impl PageWriter for AnchorWriterJSONL {
     fn write<W: Write>(page: Page, writer: &mut W) -> io::Result<()> {
         let anchors = page
