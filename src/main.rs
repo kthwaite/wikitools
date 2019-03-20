@@ -69,18 +69,29 @@ where
     bincode::serialize_into(file, &anchor_counts)
 }
 
-/// Build and serialise a FST from flat anchors.
-fn build_fst_from_anchors(anchor_counts_flat_path: &Path, output_path: Option<&Path>) -> Result<(), Box<std::error::Error>> {
+fn read_from_qpt<V>(
+    anchor_counts_flat_path: &Path,
+    buf_size: Option<usize>,
+)  -> bincode::Result<Trie<BString, u32>>
+where
+    V: Serialize,
+{
     let mut timer = Timer::new();
-
-    let output_path = output_path.unwrap_or(Path::new("anchor-counts.fst"));
-
     info!("Loading anchor counts...");
     timer.reset();
     let file = File::open(anchor_counts_flat_path)?;
-    let reader = BufReader::with_capacity(256 * 1024 * 1024, file);
+    let buf_size = buf_size.unwrap_or(256 * 1024 * 1024);
+    let reader = BufReader::with_capacity(buf_size, file);
     let anchor_counts: Trie<BString, u32> = bincode::deserialize_from(reader)?;
     timer.finish();
+    Ok(anchor_counts)
+}
+
+/// Build and serialise a FST from flat anchors.
+fn build_fst_from_anchors(anchor_counts: Trie<BString, u32>, output_path: Option<&Path>) -> Result<(), Box<std::error::Error>> {
+    let mut timer = Timer::new();
+
+    let output_path = output_path.unwrap_or(Path::new("anchor-counts.fst"));
     
     use fst::{Map, MapBuilder, IntoStreamer, Streamer};
     use fst_regex::Regex;
@@ -107,46 +118,40 @@ fn build_fst_from_anchors(anchor_counts_flat_path: &Path, output_path: Option<&P
     Ok(())
 }
 
+
 fn main() -> Result<(), Box<std::error::Error>> {
+    env_logger::init();
     let settings = Settings::new("config.toml")?;
 
-    println!("settings: {:#?}", settings);
-
-    let (data, indices) = (&settings.data, &settings.indices);
+    info!("wikitools dump 0.0.0");
+    debug!("settings: {:#?}", settings);
 
     // Fetch all page indices, writing to file if they do not already exist.
-    let page_indices = {
-        if !indices.pages.exists() {
-            write_all_indices(&data.index, &indices.pages)?
-        } else {
-            read_indices(&indices.pages)?
-        }
-    };
+    let page_indices = build_or_load_page_indices(&settings)?;
 
     // Fetch all template indices, writing to file if they do not already exist.
-    let template_indices = {
-        if !indices.templates.exists() {
-            write_template_indices(&data.index, &indices.templates)?
-        } else {
-            read_indices(&indices.templates)?
-        }
-    };
+    let template_indices = build_or_load_template_indices(&settings)?;
 
+    // If the templates master file does not exist, create it.
     if !settings.templates.exists() {
-        compile_templates(&template_indices, &data.dump, &settings.templates);
+        info!("Compiling templates file");
+        compile_templates(&template_indices, &settings.data.dump, &settings.templates);
     };
 
-    let anchors = &settings.anchors;
-    if !anchors.anchors.exists() {
-        write_anchors(&page_indices, &data.dump, &anchors.anchors, 4096)
-            .expect("Failed to extract anchors!");
+
+    info!("Building anchor counts...");
+    let anchor_counts = extract_anchor_counts_to_trie(
+        TrieBuilderFlat,
+        &page_indices,
+        &settings.data.dump
+    );
+
+
+    if !settings.anchors.anchor_counts.exists() {
+        build_fst_from_anchors(anchor_counts, &settings.anchors.anchor_counts)?;
     }
 
-    if !anchors.anchor_counts.exists() {
-        let anchor_counts = extract_anchor_counts_from_anchors("anchors-2019-01-10", None)?;
-        let file = File::create("anchor-counts-2019-01-17")?;
-        let mut file = BufWriter::with_capacity(8192 * 1024, file);
-        write_anchor_counts(anchor_counts, &mut file);
+    Ok(())
     }
     Ok(())
 }
