@@ -27,7 +27,18 @@ impl<R: Read> PageIterator<R> {
     }
 
     fn extract_id(&mut self) {
-        self.id = self.reader.read_text(b"id", &mut self.page_buf).unwrap();
+
+    fn is_filtered_title(&self) -> bool {
+        // Skip over files.
+        self.title.starts_with("File:")
+        // Skip over templates.
+        || self.title.starts_with("Template:")
+        // Skip over Wikipedia internal pages.
+        || self.title.starts_with("Wikipedia:")
+        // Skip over User talk.
+        || self.title.starts_with("User talk:")
+        // Skip over File talk.
+        || self.title.starts_with("File talk:")
     }
 }
 
@@ -71,12 +82,7 @@ impl<R: Read> Iterator for PageIterator<R> {
                 }
                 Tag::Text => {
                     // Don't skip Portal pages for now.
-                    // Skip over files.
-                    if self.title.starts_with("File:")
-                    // Skip over templates.
-                    || self.title.starts_with("Template:")
-                    // Skip over Wikipedia internal pages.
-                    || self.title.starts_with("Wikipedia:")
+                    if self.is_filtered_title()
                     {
                         continue;
                     }
