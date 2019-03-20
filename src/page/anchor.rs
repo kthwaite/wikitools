@@ -9,7 +9,7 @@ lazy_static! {
 
 /// Wikipedia anchor, representing a link between pages, optionally with a
 /// surface realisation.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum Anchor {
     Direct(String),
     Label { surface: String, page: String },
@@ -17,10 +17,14 @@ pub enum Anchor {
 
 impl Anchor {
     /// Parse an anchor string, returning an Anchor.
+    /// 
+    /// We consider two forms:
+    /// - [[abc]] is seen as "abc" in text and links to page "abc".
+    /// - [[a|b]] is labelled "b" but links to page "a".
     pub fn parse(anchor: &str) -> Self {
         match anchor.find('|') {
             Some(index) => {
-                let page = anchor[..index].to_owned();
+                let page = anchor[..index].trim().to_owned();
                 let surface = anchor[index + 1..].trim();
                 if surface.is_empty() {
                     Anchor::Direct(page)
@@ -73,5 +77,26 @@ impl Anchor {
     /// Check if an anchor points to handle.net.
     pub fn is_handle(anchor: &str) -> bool {
         anchor.starts_with("hdl:")
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_direct_anchor_trims_whitespace() {
+        let anchor = Anchor::parse("  page");
+        assert_eq!(anchor, Anchor::Direct("page".to_owned()));
+    }
+
+    #[test]
+    fn test_label_anchor_trims_whitespace() {
+        let anchor = Anchor::parse("  page  | label  ");
+        assert_eq!(anchor, Anchor::Label{
+            surface: "label".to_owned(),
+            page: "page".to_owned(),
+        });
     }
 }
