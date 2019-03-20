@@ -12,6 +12,7 @@ pub struct PageIterator<R: Read> {
 }
 
 impl<R: Read> PageIterator<R> {
+    /// Create a new iterator from an XML source.
     pub fn new(xml_stream: BufReader<R>) -> Self {
         PageIterator {
             reader: qx::Reader::from_reader(xml_stream),
@@ -22,12 +23,14 @@ impl<R: Read> PageIterator<R> {
         }
     }
 
+    /// Capture and set the title of the current page.
     fn extract_title(&mut self) {
         if let Ok(title) = self.reader.read_text(b"title", &mut self.page_buf) {
             self.title = title;
         }
     }
 
+    /// Capture and set the id of the current page.
     fn extract_id(&mut self) {
         if let Ok(id) = self.reader.read_text(b"id", &mut self.page_buf) {
             self.id = id;
