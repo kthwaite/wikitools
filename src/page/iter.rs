@@ -23,10 +23,16 @@ impl<R: Read> PageIterator<R> {
     }
 
     fn extract_title(&mut self) {
-        self.title = self.reader.read_text(b"title", &mut self.page_buf).unwrap();
+        if let Ok(title) = self.reader.read_text(b"title", &mut self.page_buf) {
+            self.title = title;
+        }
     }
 
     fn extract_id(&mut self) {
+        if let Ok(id) = self.reader.read_text(b"id", &mut self.page_buf) {
+            self.id = id;
+        }
+    }
 
     fn is_filtered_title(&self) -> bool {
         // Skip over files.
