@@ -17,7 +17,7 @@ pub enum Anchor {
 
 impl Anchor {
     /// Parse an anchor string, returning an Anchor.
-    /// 
+    ///
     /// We consider two forms:
     /// - [[abc]] is seen as "abc" in text and links to page "abc".
     /// - [[a|b]] is labelled "b" but links to page "a".
@@ -39,12 +39,10 @@ impl Anchor {
                     }
                 }
             }
-            None => {
-                match anchor.find('#') {
-                    None => Anchor::Direct(anchor.trim().to_owned()),
-                    Some(index) => Anchor::Direct(anchor.trim()[..index].to_owned()),
-                }
-            }
+            None => match anchor.find('#') {
+                None => Anchor::Direct(anchor.trim().to_owned()),
+                Some(index) => Anchor::Direct(anchor.trim()[..index].to_owned()),
+            },
         }
     }
 
@@ -89,7 +87,6 @@ impl Anchor {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -109,10 +106,13 @@ mod test {
     #[test]
     fn test_label_anchor_trims_whitespace() {
         let anchor = Anchor::parse("  page  | label  ");
-        assert_eq!(anchor, Anchor::Label{
-            surface: "label".to_owned(),
-            page: "page".to_owned(),
-        });
+        assert_eq!(
+            anchor,
+            Anchor::Label {
+                surface: "label".to_owned(),
+                page: "page".to_owned(),
+            }
+        );
     }
 
     #[test]
@@ -120,9 +120,12 @@ mod test {
         let anchor = Anchor::parse("page#anchor");
         assert_eq!(anchor, Anchor::Direct("page".to_owned()));
         let anchor = Anchor::parse("page#anchor| label  ");
-        assert_eq!(anchor, Anchor::Label{
-            surface: "label".to_owned(),
-            page: "page".to_owned(),
-        });
+        assert_eq!(
+            anchor,
+            Anchor::Label {
+                surface: "label".to_owned(),
+                page: "page".to_owned(),
+            }
+        );
     }
 }

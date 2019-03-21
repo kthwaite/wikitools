@@ -24,6 +24,11 @@ impl Page {
         }
     }
 
+    /// Return the title with all text after the first '(' or ',' stripped.
+    pub fn title_stripped(&self) -> String {
+        self.title.clone()
+    }
+
     /// Extract category links from the text of a Wikipedia page, returning a
     /// Vec of Category objects.
     pub fn extract_categories(page: &str) -> Vec<Category> {

@@ -37,6 +37,7 @@ impl<R: Read> PageIterator<R> {
         }
     }
 
+    // TODO: use regex here, with custom filters.
     fn is_filtered_title(&self) -> bool {
         // Skip over files.
         self.title.starts_with("File:")
@@ -125,6 +126,49 @@ impl<R: Read> Iterator for RawPageIterator<R> {
                         match self.0.reader.read_text(b"text", &mut self.0.page_buf) {
                             Ok(page) => {
                                 return Some(page);
+                            }
+                            Err(_) => return None,
+                        }
+                    }
+                    _ => (),
+                },
+                Ok(Event::Empty(ref tag)) => match tag.name() {
+                    b"redirect" => {
+                        self.0
+                            .reader
+                            .read_to_end(b"page", &mut self.0.page_buf)
+                            .unwrap();
+                    }
+                    _ => (),
+                },
+                Ok(Event::Eof) => break,
+                Ok(_) => (),
+                Err(_) => break,
+            }
+        }
+        None
+    }
+}
+
+/// Iterator yielding String for each page in an XML file.
+pub struct TantivyPageIterator<R: Read>(pub PageIterator<R>);
+
+impl<R: Read> Iterator for TantivyPageIterator<R> {
+    type Item = (String, String, String);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.0.reader.read_event(&mut self.0.buf) {
+                Ok(Event::Start(ref tag)) => match tag.name() {
+                    b"id" => self.0.extract_id(),
+                    b"title" => self.0.extract_title(),
+                    b"text" => {
+                        if self.0.is_filtered_title() {
+                            continue;
+                        }
+                        match self.0.reader.read_text(b"text", &mut self.0.page_buf) {
+                            Ok(page) => {
+                                return Some((self.0.id.clone(), self.0.title.clone(), page));
                             }
                             Err(_) => return None,
                         }

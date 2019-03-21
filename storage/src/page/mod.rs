@@ -6,7 +6,7 @@ pub mod writer;
 
 pub use self::{
     anchor::Anchor,
-    iter::{PageIterator, RawPageIterator},
+    iter::{PageIterator, RawPageIterator, TantivyPageIterator},
     page::Page,
     writer::PageWriter,
 };
