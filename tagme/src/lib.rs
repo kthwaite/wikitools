@@ -114,7 +114,7 @@ impl TagMeQuery {
             if w_count == 1 || w_count > 6 {
                 continue;
             }
-            println!("NGRAM: {}", ngram);
+            trace!("NGRAM: {}", ngram);
             let mention = map.entities_for_query(ngram).unwrap();
             // TODO: this should be configurable.
             if mention.wiki_occurrences() < 2.0 {
@@ -160,7 +160,6 @@ impl TagMeQuery {
                 entities.remove(m_i);
             }
         }
-        println!("{:?}", entities);
         entities
     }
 
@@ -169,19 +168,21 @@ impl TagMeQuery {
     }
 
     /// vote_e = sum_e_i(mw_rel(e, e_i) * cmn(e_i)) / i
-    fn get_vote(&self, entity: &str, men_cand_ens: &HashMap<String, f32>) -> f32 {
+    fn get_vote(&mut self, wiki_index: &TantivyWikiIndex, entity: &str, men_cand_ens: &HashMap<String, f32>) -> f32 {
+        println!("get_vote({}, {:?})", entity, men_cand_ens);
         let mut vote: f32 = 0.0;
         for (e_i, cmn) in men_cand_ens.iter() {
-            let mw_rel = self.get_mw_rel(entity, e_i);
+            let mw_rel = self.get_mw_rel(wiki_index, entity, e_i);
             // print(f"\t{e_i} cmn:{cmn} mw_rel:{mw_rel}")
             vote += cmn * mw_rel;
         }
         let vote: f32 = (vote as f32) / (men_cand_ens.len() as f32);
+        println!("vote for {} -> {}", entity, vote);
         vote
     }
 
     /// Performs disambiguation and link each mention to a single entity.
-    pub fn disambiguate(&mut self, candidate_entities: &HashMap<String, HashMap<String, f32>>) -> HashMap<String, String> {
+    pub fn disambiguate(&mut self, wiki_index: &TantivyWikiIndex, candidate_entities: &HashMap<String, HashMap<String, f32>>) -> HashMap<String, String> {
         let mut rel_scores: HashMap<String, HashMap<String, f32>> = Default::default();
         for mention_i in candidate_entities.keys() {
             rel_scores.insert(mention_i.to_string(), HashMap::default());
@@ -191,12 +192,13 @@ impl TagMeQuery {
                         if mention_i == mention_j {
                             return acc;
                         }
-                        acc + self.get_vote(entity_mention_i, &candidate_entities.get(mention_j).unwrap())
+                        acc + self.get_vote(wiki_index, entity_mention_i, &candidate_entities.get(mention_j).unwrap())
                     });
                 rel_scores.get_mut(mention_i).unwrap()
                     .insert(entity_mention_i.to_string(), vote_sum);
             }
         }
+        println!("rel_scores: {:?}", rel_scores);
 
         // pruning uncommon entities (based on the paper)
         for mention_i in rel_scores.keys() {
@@ -207,7 +209,6 @@ impl TagMeQuery {
                         .entry(mention_i.to_string())
                         .or_insert_with(Default::default)
                         .insert(entity_mention_i.to_string(), rel_scores[mention_i][entity_mention_i]);
-
                 }
             }
         }
@@ -215,10 +216,13 @@ impl TagMeQuery {
         // DT pruning
         let mut disambiguated_entities:  HashMap<String, String> = Default::default();
         for mention_i in self.rel_scores.keys() {
+            println!("evaluating mention {}", mention_i);
             if self.rel_scores[mention_i].len() == 0 {
+                println!("skipping mention {}, score zero", mention_i);
                 continue;
             }
             let top_k_entities = self.get_top_k(mention_i);
+            println!("top_k_entities for {}: {:?}", mention_i, top_k_entities);
             let mut best_cmn = 0.0f32;
             let mut best_en: Option<&str> = None;
             for entity in top_k_entities {
@@ -250,18 +254,29 @@ impl TagMeQuery {
     /// is based on the 'Dexter' implementation (which is similar to TAGME implementation).
     /// - Dexter implementation: https://github.com/dexter/dexter/blob/master/dexter-core/src/main/java/it/cnr/isti/hpc/dexter/relatedness/MilneRelatedness.java
     /// - TAGME: it.acubelab.tagme.preprocessing.graphs.OnTheFlyArrayMeasure
-    fn get_mw_rel(&self, e1: &str, e2: &str) -> f32 {
-        if e1 == e2 {
+    fn get_mw_rel(&mut self, wiki_index: &TantivyWikiIndex, e0: &str, e1: &str) -> f32 {
+        if e0 == e1 {
             return 1.0;
         }
         // en_uris = tuple(sorted({e1, e2}))
-        // ens_in_links = [self.__get_in_links([en_uri]) for en_uri in en_uris]
-        // if ens_in_links.min() == 0 {
-        //     return 0.0;
-        // }
-        // conj = self.__get_in_links(en_uris)
-        // if conj == 0:
-        //     return 0
+        let ens_in_links = [
+            self.get_in_links(&wiki_index, &[e0]),
+            self.get_in_links(&wiki_index, &[e1]),
+        ];
+        let min = if ens_in_links[0] > ens_in_links[1] {
+            ens_in_links[1]
+        } else {
+            ens_in_links[0]
+        };
+
+        if min == 0 {
+            return 0.0;
+        }
+        let conj = self.get_in_links(&wiki_index, &[e0, e1]);
+        if conj == 0 {
+            return 0.0;
+        }
+        
         // let numerator = math.log(max(ens_in_links)) - math.log(conj)
         // let denominator = math.log(ANNOT_INDEX.num_docs()) - math.log(min(ens_in_links))
         // let rel = 1 - (numerator / denominator);
@@ -273,7 +288,7 @@ impl TagMeQuery {
     }
 
     /// Returns "and" occurrences of entities in the corpus.
-    fn get_in_links(&mut self, wiki_index: TantivyWikiIndex, en_uris: &[&str]) -> usize {
+    fn get_in_links(&mut self, wiki_index: &TantivyWikiIndex, en_uris: &[&str]) -> usize {
         use std::collections::HashSet;
         let en_uris = en_uris.iter()
             .map(|v| *v)
@@ -292,7 +307,8 @@ impl TagMeQuery {
 
     /// coherence_score = sum_e_i(rel(e_i, en)) / len(ens) - 1
     fn get_coherence_score(
-        &self,
+        &mut self,
+        wiki_index: &TantivyWikiIndex,
         mention: &str,
         entity: &str,
         disambiguated_entities: &HashMap<String, String>,
@@ -300,7 +316,7 @@ impl TagMeQuery {
         let coherence_score: f32 = disambiguated_entities
             .iter()
             .filter(|(mention_i, _)| mention_i != &mention)
-            .map(|(_, entity_i)| self.get_mw_rel(entity_i, entity))
+            .map(|(_, entity_i)| self.get_mw_rel(&wiki_index, entity_i, entity))
             .sum();
         let divisor = if disambiguated_entities.len() - 1 != 0 {
             (disambiguated_entities.len() - 1) as f32
@@ -324,6 +340,7 @@ impl TagMeQuery {
             .iter()
             .map(|(s, v)| (s.as_str(), v))
             .collect();
+        println!("sorted scores for {}: {:?}", mention, sorted_scores);
         sorted_scores.sort_by(|(_, score0), (_, score1)| {
             score1.partial_cmp(score0).unwrap()
         });
