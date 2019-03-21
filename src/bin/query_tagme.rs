@@ -1,9 +1,7 @@
-use tagme::{SurfaceFormSource, TagMeQuery};
+use tagme::TagMeQuery;
 
-use tantivy::{
-    directory::MmapDirectory, schema::*, Index,
-};
 use log::info;
+use tantivy::{directory::MmapDirectory, schema::*, Index};
 
 use storage::fst::WikiAnchors;
 use storage::tantivy::TantivyWikiIndex;
@@ -26,6 +24,8 @@ fn main() {
     let map = WikiAnchors::new("./anchors-flat.fst").unwrap();
     let index = TantivyWikiIndex::new("./wiki-index");
 
-    let mut qry = TagMeQuery::new("Orpheus and Eurydice", 1.0, SurfaceFormSource::Wiki);
-    qry.parse(&map, &index);
+    let mut qry = TagMeQuery::new("Orpheus and Eurydice", 1.0);
+    let ents = qry.parse(&map, &index);
+    let ents = qry.disambiguate(&ents);
+    println!("{:?}", ents);
 }
