@@ -5,7 +5,8 @@ use tantivy::{
     schema::*,
     directory::MmapDirectory,
     collector::Count,
-    query::QueryParser,
+    Term,
+    query::{Occur, QueryParser, Query, BooleanQuery, TermQuery},
 };
 use std::sync::Mutex;
 use std::path::Path;
@@ -151,13 +152,17 @@ impl TantivyWikiIndex {
     }
 
     pub fn count_mutual_outlinks(&self, query: &[&str]) -> usize {
-        use tantivy::{Term, query::{BooleanQuery, TermQuery}};
         let terms = query.iter()
             .map(|term| {
                 Term::from_field_text(self.outlinks, term)
             })
+            .map(|term| {
+                let term_query: Box<Query> =
+                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
+                (Occur::Must, term_query)
+            })
             .collect::<Vec<_>>();
-        let query = BooleanQuery::new_multiterms_query(terms);
+        let query = BooleanQuery::from(terms);
         self.reader.searcher().search(&query, &Count).unwrap()
     }
 }
