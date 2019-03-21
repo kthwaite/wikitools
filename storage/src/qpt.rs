@@ -1,10 +1,10 @@
 use bincode;
-use qp_trie::{Trie, wrapper::BString};
-use std::io::{BufReader, BufWriter};
-use std::time::Instant;
-use std::path::Path;
 use log::info;
+use qp_trie::{wrapper::BString, Trie};
 use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
+use std::time::Instant;
 
 /// Serialize a Trie into a .qpt binary file.
 pub fn write_to_qpt<P>(
@@ -13,7 +13,7 @@ pub fn write_to_qpt<P>(
     buf_size: Option<usize>,
 ) -> bincode::Result<()>
 where
-    P: AsRef<Path>
+    P: AsRef<Path>,
 {
     let file = File::create(path)?;
     let buf_size = buf_size.unwrap_or(256 * 1024 * 1024);
@@ -25,9 +25,9 @@ where
 pub fn read_from_qpt<P>(
     anchor_counts_flat_path: P,
     buf_size: Option<usize>,
-)  -> bincode::Result<Trie<BString, u32>>
+) -> bincode::Result<Trie<BString, u32>>
 where
-    P: AsRef<Path>
+    P: AsRef<Path>,
 {
     info!("Loading anchor counts...");
 

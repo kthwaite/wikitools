@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, prelude::*, BufReader, SeekFrom};
 use std::path::Path;
 
-use bzip2::{read::BzDecoder};
+use bzip2::read::BzDecoder;
 
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 

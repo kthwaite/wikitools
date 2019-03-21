@@ -1,19 +1,16 @@
-use tantivy::{
-    Index,
-    IndexWriter,
-    IndexReader,
-    schema::*,
-    directory::MmapDirectory,
-    collector::Count,
-    Term,
-    query::{Occur, QueryParser, Query, BooleanQuery, TermQuery},
-};
-use std::sync::Mutex;
-use std::path::Path;
 use rayon::prelude::*;
+use std::path::Path;
+use std::sync::Mutex;
+use tantivy::{
+    collector::Count,
+    directory::MmapDirectory,
+    query::{BooleanQuery, Occur, Query, QueryParser, TermQuery},
+    schema::*,
+    Index, IndexReader, IndexWriter, Term,
+};
 
-use crate::utils::{open_seek_bzip};
-use crate::page::{PageIterator, TantivyPageIterator, anchor::Anchor};
+use crate::page::{anchor::Anchor, PageIterator, TantivyPageIterator};
+use crate::utils::open_seek_bzip;
 
 /// Use tantivy to index content from a bzip2 multistream.
 ///
@@ -98,7 +95,7 @@ impl TantivyWikiIndex {
 
         let content = schema.get_field("content").unwrap();
         let text_count_parser = QueryParser::for_index(&index, vec![content]);
-        
+
         let outlinks = schema.get_field("outlinks").unwrap();
         let mut out_link_parser = QueryParser::for_index(&index, vec![outlinks]);
         out_link_parser.set_conjunction_by_default();
@@ -126,19 +123,17 @@ impl TantivyWikiIndex {
 
         schema_builder.add_u64_field("id", FAST);
         schema_builder.add_text_field("title", STRING | STORED);
-        let options = TextOptions::default()
-            .set_indexing_options(
-                TextFieldIndexing::default()
-                    .set_index_option(IndexRecordOption::WithFreqsAndPositions)
-                    .set_tokenizer("default")
-            );
+        let options = TextOptions::default().set_indexing_options(
+            TextFieldIndexing::default()
+                .set_index_option(IndexRecordOption::WithFreqsAndPositions)
+                .set_tokenizer("default"),
+        );
         schema_builder.add_text_field("content", options);
-        let options = TextOptions::default()
-            .set_indexing_options(
-                TextFieldIndexing::default()
-                    .set_index_option(IndexRecordOption::WithFreqs)
-                    .set_tokenizer("default")
-            );
+        let options = TextOptions::default().set_indexing_options(
+            TextFieldIndexing::default()
+                .set_index_option(IndexRecordOption::WithFreqs)
+                .set_tokenizer("default"),
+        );
         schema_builder.add_text_field("outlinks", options);
 
         schema_builder.build()
@@ -148,14 +143,13 @@ impl TantivyWikiIndex {
         let query = format!(r#""{}""#, query);
         let query = self.text_count_parser.parse_query(&query).unwrap();
 
-        self.reader.searcher().search(&*query, &Count).unwrap() 
+        self.reader.searcher().search(&*query, &Count).unwrap()
     }
 
     pub fn count_mutual_outlinks(&self, query: &[&str]) -> usize {
-        let terms = query.iter()
-            .map(|term| {
-                Term::from_field_text(self.outlinks, term)
-            })
+        let terms = query
+            .iter()
+            .map(|term| Term::from_field_text(self.outlinks, term))
             .map(|term| {
                 let term_query: Box<Query> =
                     Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
