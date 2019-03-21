@@ -12,7 +12,7 @@ use std::path::Path;
 use rayon::prelude::*;
 
 use crate::utils::{open_seek_bzip};
-use crate::page::{PageIterator, TantivyPageIterator, Anchor};
+use crate::page::{PageIterator, TantivyPageIterator, anchor::Anchor};
 
 /// Use tantivy to index content from a bzip2 multistream.
 ///
@@ -49,8 +49,8 @@ pub fn index_anchors(
                         .filter_map(|(begin, _)| Anchor::pare_anchor_match(&page_content, begin))
                         .map(Anchor::parse)
                         .map(|anchor| match anchor {
-                            Anchor::Direct(name) => name,
-                            Anchor::Label { _surface, page } => page,
+                            Anchor::Direct(name) => name.replace(" ", "_"),
+                            Anchor::Label { surface, page } => page.replace(" ", "_"),
                         })
                         .collect::<Vec<_>>()
                         .join(" ");
@@ -151,8 +151,16 @@ impl TantivyWikiIndex {
     }
 
     pub fn count_mutual_outlinks(&self, query: &[&str]) -> usize {
+        use tantivy::{Term, query::{BooleanQuery, TermQuery}};
         let terms = query.iter()
             .map(|term| {
+                Term::from_field_text(self.outlinks, term)
+            })
+            .collect::<Vec<_>>();
+        let query = BooleanQuery::new_multiterms_query(terms);
+        self.reader.searcher().search(&query, &Count).unwrap()
+    }
+}
                 TermQuery::new(
                     Term::from_field_text(self.outlinks, term),
                     IndexRecordOption::Basic,
