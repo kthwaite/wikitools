@@ -76,5 +76,6 @@ template_indices
 *.py
 anchor*-*
 *.svg
-wiki-index/
+wiki-index*/
 defunct/
+actest-*
