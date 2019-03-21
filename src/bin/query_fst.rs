@@ -5,6 +5,7 @@ use std::path::Path;
 use std::error;
 
 
+/// Validate path args.
 fn is_path(path: String) -> Result<(), String> {
     if Path::new(&path).exists() {
         return Ok(());
@@ -12,20 +13,25 @@ fn is_path(path: String) -> Result<(), String> {
     Err(format!("{} is not a valid path", path))
 }
 
-fn fetch_one(map: &Map, query: &str) -> Result<(), Box<error::Error>>{
+
+/// Fetch the result of one query from the FST.
+fn fetch_one(map: &Map, query: &str) -> Result<(), Box<error::Error>> {
     println!("Building regex...");
     let re = Regex::new(&format!("{}\t.*", query))?;
     println!("searching...");
-    let stream = map.search(&re).into_stream();
-    for (key, count) in stream.into_str_vec()? {
+    let stream = map.search(&re).into_stream().into_str_vec()?;
+    let stream = stream.iter();
+    for (key, count) in stream {
         println!("{}\t{}", key, count);
     }
     Ok(())
 }
 
+
 fn fetch_interactive() -> Result<(), Box<error::Error>> {
     Ok(())
 }
+
 
 fn main() -> Result<(), Box<error::Error>> {
     let app = App::new("query_fst")
@@ -54,7 +60,6 @@ fn main() -> Result<(), Box<error::Error>> {
         Some(fst_path) => fst_path,
     };
 
-    
     println!("Loading {}", fst_path);
     let map = unsafe { Map::from_path(fst_path) }?;
     match app.value_of("query") {
