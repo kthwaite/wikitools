@@ -12,7 +12,7 @@ use std::path::Path;
 use rayon::prelude::*;
 
 use crate::utils::{open_seek_bzip};
-use crate::page::{PageIterator, TantivyPageIterator};
+use crate::page::{PageIterator, TantivyPageIterator, Anchor};
 
 /// Use tantivy to index content from a bzip2 multistream.
 ///
@@ -27,10 +27,11 @@ pub fn index_anchors(
     let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
     indices.sort();
 
-    let (id, title, content) = (
+    let (id, title, content, outlinks) = (
         schema.get_field("id").unwrap(),
         schema.get_field("title").unwrap(),
         schema.get_field("content").unwrap(),
+        schema.get_field("outlinks").unwrap(),
     );
 
     indices
@@ -43,6 +44,17 @@ pub fn index_anchors(
                     doc.add_u64(id, page_id.parse::<u64>().unwrap());
                     doc.add_text(title, &page_title);
                     doc.add_text(content, &page_content);
+                    let outlinks_content = page_content
+                        .match_indices("[[")
+                        .filter_map(|(begin, _)| Anchor::pare_anchor_match(&page_content, begin))
+                        .map(Anchor::parse)
+                        .map(|anchor| match anchor {
+                            Anchor::Direct(name) => name,
+                            Anchor::Label { _surface, page } => page,
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    doc.add_text(outlinks, &outlinks_content);
                     doc
                 })
                 .collect::<Vec<_>>()
@@ -66,7 +78,10 @@ pub struct TantivyWikiIndex {
     index: Index,
     reader: IndexReader,
     schema: Schema,
-    query_parser: QueryParser,
+    outlinks: Field,
+    content: Field,
+    text_count_parser: QueryParser,
+    out_link_parser: QueryParser,
 }
 
 impl TantivyWikiIndex {
@@ -79,14 +94,22 @@ impl TantivyWikiIndex {
 
         let reader = index.reader().unwrap();
         let schema = TantivyWikiIndex::create_schema();
+
         let content = schema.get_field("content").unwrap();
-        let query_parser = QueryParser::for_index(&index, vec![content]);
+        let text_count_parser = QueryParser::for_index(&index, vec![content]);
+        
+        let outlinks = schema.get_field("outlinks").unwrap();
+        let mut out_link_parser = QueryParser::for_index(&index, vec![outlinks]);
+        out_link_parser.set_conjunction_by_default();
 
         TantivyWikiIndex {
             index,
             reader,
             schema,
-            query_parser,
+            outlinks,
+            content,
+            text_count_parser,
+            out_link_parser,
         }
     }
 
@@ -96,6 +119,7 @@ impl TantivyWikiIndex {
     /// * `id` - Page ID; FAST
     /// * `title` - Page title; STRING | STORED
     /// * `content` - Page content; default tokenizer, indexed `WithFreqsAndPositions`.
+    /// * `outlinks` - Page links; default tokenizer, indexed `WithFreqs`.
     pub fn create_schema() -> Schema {
         let mut schema_builder = Schema::builder();
 
@@ -108,14 +132,35 @@ impl TantivyWikiIndex {
                     .set_tokenizer("default")
             );
         schema_builder.add_text_field("content", options);
+        let options = TextOptions::default()
+            .set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_index_option(IndexRecordOption::WithFreqs)
+                    .set_tokenizer("default")
+            );
+        schema_builder.add_text_field("outlinks", options);
 
         schema_builder.build()
     }
 
     pub fn count_matches_for_query(&self, query: &str) -> usize {
         let query = format!(r#""{}""#, query);
-        let query = self.query_parser.parse_query(&query).unwrap();
+        let query = self.text_count_parser.parse_query(&query).unwrap();
 
         self.reader.searcher().search(&*query, &Count).unwrap() 
     }
+
+    pub fn count_mutual_outlinks(&self, query: &[&str]) -> usize {
+        let terms = query.iter()
+            .map(|term| {
+                TermQuery::new(
+                    Term::from_field_text(self.outlinks, term),
+                    IndexRecordOption::Basic,
+                );
+            })
+            .collect::<Vec<_>>();
+        let query = BooleanQuery::new_multiterms_query(terms);
+        self.search(&*query, &Count).unwrap()
+    }
+}
 }
