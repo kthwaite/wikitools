@@ -1,11 +1,8 @@
 use std::fs::File;
-use std::io::{self, prelude::*, BufRead, BufReader, BufWriter, SeekFrom};
+use std::io::{self, prelude::*, BufReader, SeekFrom};
 use std::path::Path;
-use std::sync::Mutex;
-use std::time::Instant;
 
-use bzip2::{read::BzDecoder, Decompress, Status};
-use log::{info, trace};
+use bzip2::{read::BzDecoder};
 
 type BZipReader = BufReader<BzDecoder<BufReader<File>>>;
 

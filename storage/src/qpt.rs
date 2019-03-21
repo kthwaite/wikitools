@@ -3,7 +3,6 @@ use qp_trie::{Trie, wrapper::BString};
 use std::io::{BufReader, BufWriter};
 use std::time::Instant;
 use std::path::Path;
-use serde::{Serialize, Deserialize};
 use log::info;
 use std::fs::File;
 

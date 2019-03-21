@@ -7,8 +7,6 @@ use tantivy::{
     collector::Count,
     query::QueryParser,
 };
-use env_logger;
-use log::{info, debug};
 use std::sync::Mutex;
 use std::path::Path;
 use rayon::prelude::*;

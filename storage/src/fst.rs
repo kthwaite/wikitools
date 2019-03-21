@@ -1,4 +1,4 @@
-use fst::{self, Map, MapBuilder, IntoStreamer, Streamer};
+use fst::{self, Map, MapBuilder, IntoStreamer};
 use fst_regex::Regex;
 use std::io::{BufWriter};
 use std::fs::File;
