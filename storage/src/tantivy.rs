@@ -96,7 +96,7 @@ pub struct TantivyWikiIndex {
 
 impl TantivyWikiIndex {
     /// Open a Tantivy index at the given path.
-    pub fn new(index_dir: &str) -> Self {
+    pub fn new<P: AsRef<Path>>(index_dir: P) -> Self {
         let index = {
             let mmap_dir = MmapDirectory::open(index_dir).unwrap();
             Index::open(mmap_dir).unwrap()
