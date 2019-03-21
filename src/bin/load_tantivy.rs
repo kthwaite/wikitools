@@ -10,7 +10,6 @@ use std::sync::Mutex;
 use std::path::Path;
 use rayon::prelude::*;
 
-use wikitools::indices::WikiDumpIndices;
 use wikitools::loaders::build_or_load_page_indices;
 use wikitools::settings::Settings;
 use wikitools::page::{PageIterator, TantivyPageIterator};
@@ -87,10 +86,12 @@ fn main() -> Result<(), Box<std::error::Error>> {
     let schema = create_schema();
 
     if !settings.search_index.index_dir.exists() {
+        info!("Creating search index dir: {}", settings.search_index.index_dir.to_str().unwrap());
         std::fs::create_dir(&settings.search_index.index_dir)?;
     }
 
     let index = {
+        info!("Loading search index dir: {}", settings.search_index.index_dir.to_str().unwrap());
         let index_dir = &settings.search_index.index_dir;
         match MmapDirectory::open(index_dir) {
             Ok(mmap_dir) => {
@@ -104,17 +105,22 @@ fn main() -> Result<(), Box<std::error::Error>> {
         }
     };
 
-    let index_buf_sz = 256 * 1024 * 1024;
+    let index_buf_sz = 1024 * 1024 * 1024;
     let chunk_len = 10_000;
 
     let index_writer = index.writer(index_buf_sz).unwrap();
     let index_writer = Mutex::new(index_writer);
+    let chunk_count = indices.len() / chunk_len;
     info!("Processing {} document chunks in blocks of {}", indices.len(), chunk_len);
-    let indices: WikiDumpIndices = indices.into_iter().take(10_000).collect();
-    for chunk in indices.keys().collect::<Vec<_>>().chunks(chunk_len) {
+    info!("Using index buffer size: {}", index_buf_sz);
+    let mut pbar = pbr::ProgressBar::new(chunk_count as u64);
+    for (index, chunk) in indices.keys().collect::<Vec<_>>().chunks(chunk_len).enumerate() {
+        info!("Processing chunk {}", index);
         index_anchors(chunk.to_vec(), &settings.data.dump, &index_writer, &schema)?;
         let mut writer = index_writer.lock().expect("Failed to unlock indexer");
+        info!("Committing pending documents...");
         writer.commit().unwrap();
+        pbar.inc();
     }
     Ok(())
 }
