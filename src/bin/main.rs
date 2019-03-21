@@ -1,25 +1,19 @@
-#![allow(dead_code)]
-
-mod extract;
-mod find_indices;
-mod indices;
-mod page;
-mod redirect;
-mod settings;
-mod surface_forms;
-mod template;
-mod utils;
+#![allow(dead_code, unused_imports)]
 
 use env_logger;
 use log::{debug, info};
 use std::io;
 
-use crate::extract::extract_anchor_counts_to_trie;
-use crate::extract::{TrieBuilderFlat, TrieBuilderNested};
-use crate::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
-use crate::settings::Settings;
-use crate::template::compile_templates;
-use crate::utils::Timer;
+use wikitools::extract::extract_anchor_counts_to_trie;
+use wikitools::extract::{TrieBuilderFlat, TrieBuilderNested};
+use wikitools::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
+use wikitools::settings::Settings;
+use wikitools::template::compile_templates;
+use wikitools::utils::Timer;
+use wikitools::loaders::{
+    build_or_load_page_indices,
+    build_or_load_template_indices,
+};
 
 use bincode;
 use qp_trie::{
@@ -30,29 +24,6 @@ use serde::Serialize;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
-
-fn build_or_load_page_indices(settings: &Settings) -> io::Result<WikiDumpIndices> {
-    if !settings.indices.pages.exists() {
-        info!("Building page indices");
-        write_all_indices(&settings.data.index, &settings.indices.pages)
-    } else {
-        info!("Loading page indices from {:?}", settings.indices.pages);
-        read_indices(&settings.indices.pages)
-    }
-}
-
-fn build_or_load_template_indices(settings: &Settings) -> io::Result<WikiDumpIndices> {
-    if !settings.indices.templates.exists() {
-        info!("Building template indices");
-        write_template_indices(&settings.data.index, &settings.indices.templates)
-    } else {
-        info!(
-            "Loading template indices from {:?}",
-            settings.indices.templates
-        );
-        read_indices(&settings.indices.templates)
-    }
-}
 
 /// Serialize a Trie into a .qpt binary file.
 fn write_to_qpt<V>(
@@ -88,10 +59,8 @@ where
 }
 
 /// Build and serialise a FST from flat anchors.
-fn build_fst_from_anchors(anchor_counts: Trie<BString, u32>, output_path: Option<&Path>) -> Result<(), Box<std::error::Error>> {
+fn build_fst_from_anchors(anchor_counts: Trie<BString, u32>, output_path: &Path) -> Result<(), Box<std::error::Error>> {
     let mut timer = Timer::new();
-
-    let output_path = output_path.unwrap_or(Path::new("anchor-counts.fst"));
     
     use fst::{Map, MapBuilder, IntoStreamer, Streamer};
     use fst_regex::Regex;
@@ -119,6 +88,19 @@ fn build_fst_from_anchors(anchor_counts: Trie<BString, u32>, output_path: Option
 }
 
 
+// use crate::extract::AnchorTrieBuilder;
+
+// fn test_<Builder, V>() -> Result<(), Box<std::error::Error>>
+//     where Builder: AnchorTrieBuilder<V> {
+//     use std::fs::File;
+//     use std::io::BufWriter;
+//     use serde_json;
+//     let anchor_counts = Builder::extract(Path::new("pages10.xml.bz2"), 0);
+//     let file = File::create("anchor-counts-test-sm.json")?;
+//     let file = BufWriter::new(file);
+//     serde_json::to_writer_pretty(file, &anchor_counts)
+// }
+
 fn main() -> Result<(), Box<std::error::Error>> {
     env_logger::init();
     let settings = Settings::new("config.toml")?;
@@ -139,19 +121,36 @@ fn main() -> Result<(), Box<std::error::Error>> {
     };
 
 
-    info!("Building anchor counts...");
-    let anchor_counts = extract_anchor_counts_to_trie(
-        TrieBuilderFlat,
-        &page_indices,
-        &settings.data.dump
-    );
-
-
     if !settings.anchors.anchor_counts.exists() {
+        info!("Building anchor counts...");
+        let anchor_counts = extract_anchor_counts_to_trie(
+            TrieBuilderFlat,
+            &page_indices,
+            &settings.data.dump
+        );
+        info!("Building FST from anchor counts...");
         build_fst_from_anchors(anchor_counts, &settings.anchors.anchor_counts)?;
     }
 
     Ok(())
+    /*
+
+    for (surface_form, entities) in anchor_counts {
+        for (entity, count) in entities {
+            writeln!(writer, "{}\t{}\t{}", surface_form, entity, count).unwrap();
+        }
+        prog_bar.inc();
     }
-    Ok(())
+    let index_dir = &settings.search_index.index_dir;
+
+    let (_schema, _index) = if !index_dir.exists() {
+        build_index(index_dir, &page_indices, &data.dump, 500_000_000)
+            .expect("Failed to build Index")
+    } else {
+        let dir = MmapDirectory::open(&index_dir).unwrap();
+        let index = Index::open(dir).expect("Failed to load Index");
+        (index.schema(), index)
+    };
+
+    */
 }
