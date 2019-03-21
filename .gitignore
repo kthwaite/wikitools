@@ -75,3 +75,6 @@ template_indices
 *.bin
 *.py
 anchor*-*
+*.svg
+wiki-index/
+defunct/
