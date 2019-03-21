@@ -2,8 +2,7 @@ use tantivy::{
     directory::MmapDirectory, query::QueryParser, schema::*, Index,
     collector::Count,
 };
-use env_logger;
-use log::{info, debug};
+use clap::{App, Arg};
 
 use wikitools::settings::Settings;
 
@@ -11,11 +10,13 @@ fn count_matches_for_query(index: &Index, schema: &Schema, query: &str) -> usize
     index.load_searchers().unwrap();
 
     let searcher = index.searcher();
-    let (id, title, content) = (
-        schema.get_field("id").unwrap(),
-        schema.get_field("title").unwrap(),
-        schema.get_field("content").unwrap(),
-    );
+    /*
+    let content = match schema.get_field("content") {
+        None => return Err(...),
+        Some(content) => content
+    };
+    */
+    let content = schema.get_field("content").unwrap();
     let query_parser = QueryParser::for_index(&index, vec![content]);
     let query = query_parser.parse_query(query).unwrap();
 
@@ -37,8 +38,25 @@ pub fn create_schema() -> Schema {
 fn main() -> Result<(), Box<std::error::Error>> {
     let settings = Settings::new("config.toml")?;
 
-    info!("query_tantivy 0.0.0");
-    debug!("settings: {:#?}", settings);
+
+    let app = App::new("query_tantivy")
+        .version("0.0.0")
+        .about("Run keyphrase-count queries over a tantivy index of wikipedia data")
+        .arg(
+            Arg::with_name("query")
+                .takes_value(true)
+                .help("Query to return results for")
+                .required(true)
+        )
+        .get_matches();
+
+    let query = match app.value_of("query") {
+        Some(query) => query,
+        None => {
+            println!("{}", app.usage());
+            return Ok(());
+        }
+    };
 
     let schema = create_schema();
 
@@ -47,7 +65,7 @@ fn main() -> Result<(), Box<std::error::Error>> {
         let mmap_dir = MmapDirectory::open(index_dir).unwrap();
         Index::open(mmap_dir).unwrap()
     };
-    let count = count_matches_for_query(&index, &schema, r#""orpheus and eurydice""#);
+    let count = count_matches_for_query(&index, &schema, &format!(r#""{}""#, query));
     println!("Got {} matches", count);
     Ok(())
 }
