@@ -48,7 +48,7 @@ pub fn index_anchors(
                         .map(Anchor::parse)
                         .map(|anchor| match anchor {
                             Anchor::Direct(name) => name.replace(" ", "_"),
-                            Anchor::Label { surface, page } => page.replace(" ", "_"),
+                            Anchor::Label { page, .. } => page.replace(" ", "_"),
                         })
                         .collect::<Vec<_>>()
                         .join(" ");
