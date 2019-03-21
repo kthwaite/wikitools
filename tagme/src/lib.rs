@@ -263,44 +263,45 @@ impl TagMeQuery {
             self.get_in_links(&wiki_index, &[e0]),
             self.get_in_links(&wiki_index, &[e1]),
         ];
-        let min = if ens_in_links[0] > ens_in_links[1] {
-            ens_in_links[1]
+        let (min, max) = if ens_in_links[0] > ens_in_links[1] {
+            (ens_in_links[1] as f32, ens_in_links[0] as f32)
         } else {
-            ens_in_links[0]
+            (ens_in_links[0] as f32, ens_in_links[1] as f32)
         };
 
-        if min == 0 {
+        if min == 0.0 {
             return 0.0;
         }
-        let conj = self.get_in_links(&wiki_index, &[e0, e1]);
-        if conj == 0 {
+        let conj = self.get_in_links(&wiki_index, &[e0, e1]) as f32;
+        if conj == 0.0 {
             return 0.0;
         }
-        
-        // let numerator = math.log(max(ens_in_links)) - math.log(conj)
-        // let denominator = math.log(ANNOT_INDEX.num_docs()) - math.log(min(ens_in_links))
-        // let rel = 1 - (numerator / denominator);
-        // if rel < 0 {
-        //     return 0.0;
-        // }
-        // rel
-        0.0
+        let numerator = max.ln() - conj.ln();
+        let denominator = (wiki_index.len() as f32).ln() - min.ln();
+        let rel = 1.0 - (numerator / denominator);
+        if rel < 0.0 {
+            return 0.0;
+        }
+        rel
     }
 
     /// Returns "and" occurrences of entities in the corpus.
     fn get_in_links(&mut self, wiki_index: &TantivyWikiIndex, en_uris: &[&str]) -> usize {
         use std::collections::HashSet;
-        let en_uris = en_uris.iter()
-            .map(|v| *v)
-            .collect::<HashSet<&str>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-
         let uri_hash = hash_str_slice(&en_uris);
         if let Some(values) = self.in_links.get(&uri_hash) {
             return *values;
         }
+        let en_uris = en_uris.iter()
+            // FIXME: for some reason pages were loaded in lowercase?
+            .map(|v| v.replace(" ", "_").to_lowercase())
+            .collect::<HashSet<String>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        println!("get_in_links(..., {:?}) :: {}", en_uris, uri_hash);
         let values = wiki_index.count_mutual_outlinks(&en_uris);
+        println!("values: {}", values);
         self.in_links.insert(uri_hash, values);
         values
     }
