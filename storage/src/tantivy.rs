@@ -111,6 +111,11 @@ impl TantivyWikiIndex {
         }
     }
 
+    /// Get the number of documents in the index.
+    pub fn len(&self) -> usize {
+        self.reader.searcher().search(&AllQuery, &Count).unwrap()
+    }
+
     /// Create the default schema for wikipedia data.
     ///
     /// ## Fields
