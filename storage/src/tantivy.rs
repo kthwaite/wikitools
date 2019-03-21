@@ -14,29 +14,6 @@ use rayon::prelude::*;
 use crate::utils::{open_seek_bzip};
 use crate::page::{PageIterator, TantivyPageIterator};
 
-
-/// Create the default schema for wikipedia data.
-///
-/// ## Fields
-/// * `id` - Page ID; FAST
-/// * `title` - Page title; STRING | STORED
-/// * `content` - Page content; default tokenizer, indexed `WithFreqsAndPositions`.
-pub fn create_schema() -> Schema {
-    let mut schema_builder = Schema::builder();
-
-    schema_builder.add_u64_field("id", FAST);
-    schema_builder.add_text_field("title", STRING | STORED);
-    let options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions)
-                .set_tokenizer("default")
-        );
-    schema_builder.add_text_field("content", options);
-
-    schema_builder.build()
-}
-
 /// Use tantivy to index content from a bzip2 multistream.
 ///
 /// This index is used to fetch title and category data, and for determining document
@@ -101,7 +78,7 @@ impl TantivyWikiIndex {
         };
 
         let reader = index.reader().unwrap();
-        let schema = create_schema();
+        let schema = TantivyWikiIndex::create_schema();
         let content = schema.get_field("content").unwrap();
         let query_parser = QueryParser::for_index(&index, vec![content]);
 
@@ -113,8 +90,29 @@ impl TantivyWikiIndex {
         }
     }
 
+    /// Create the default schema for wikipedia data.
+    ///
+    /// ## Fields
+    /// * `id` - Page ID; FAST
+    /// * `title` - Page title; STRING | STORED
+    /// * `content` - Page content; default tokenizer, indexed `WithFreqsAndPositions`.
+    pub fn create_schema() -> Schema {
+        let mut schema_builder = Schema::builder();
+
+        schema_builder.add_u64_field("id", FAST);
+        schema_builder.add_text_field("title", STRING | STORED);
+        let options = TextOptions::default()
+            .set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_index_option(IndexRecordOption::WithFreqsAndPositions)
+                    .set_tokenizer("default")
+            );
+        schema_builder.add_text_field("content", options);
+
+        schema_builder.build()
+    }
+
     pub fn count_matches_for_query(&self, query: &str) -> usize {
-        // let query_parser = QueryParser::for_index(&self.index, vec![self.content]);
         let query = format!(r#""{}""#, query);
         let query = self.query_parser.parse_query(&query).unwrap();
 
