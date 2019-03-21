@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use tantivy::{
     collector::Count,
     directory::MmapDirectory,
-    query::{BooleanQuery, Occur, Query, QueryParser, TermQuery},
+    query::{AllQuery, BooleanQuery, Occur, Query, QueryParser, TermQuery},
     schema::*,
     Index, IndexReader, IndexWriter, Term,
 };
