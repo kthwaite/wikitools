@@ -5,15 +5,15 @@ pub mod stopwords;
 use crate::query::Query;
 use crate::stopwords::STOPWORDS_EN;
 use log::{debug, info, trace};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use storage::fst::WikiAnchors;
 use storage::surface_form::SurfaceForm;
 use storage::tantivy::TantivyWikiIndex;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 /// Hash an arbitrary slice of str.
-fn hash_str_slice(en_uris: &[&str]) -> u64 {
+fn hash_str_slice<S: AsRef<str> + Hash>(en_uris: &[S]) -> u64 {
     let mut s = DefaultHasher::new();
     for uri in en_uris {
         uri.hash(&mut s);
@@ -78,7 +78,7 @@ impl TagMeQuery {
         // pq = ENTITY_INDEX.get_phrase_query(mention.text, Lucene.FIELDNAME_CONTENTS)
         // mention_freq = ENTITY_INDEX.searcher.search(pq, 1).totalHits
         let mention_freq = wiki_index.count_matches_for_query(&mention.text) as f32;
-        println!("mention freq `{}` == {}", &mention.text, mention_freq);
+        trace!("mention freq `{}` == {}", &mention.text, mention_freq);
         if mention_freq == 0.0 {
             return 0.0;
         }
@@ -86,7 +86,7 @@ impl TagMeQuery {
         // This is TAGME implementation, from source code:
         // link_probability = float(wiki_occurrences) / max(mention_freq, wiki_occurrences)
         let ret = wiki_occurrences / (mention_freq).max(wiki_occurrences);
-        println!("calculated link prob == {}", ret);
+        trace!("calculated link prob == {}", ret);
         ret
     }
 
@@ -103,12 +103,10 @@ impl TagMeQuery {
         wiki_index: &TantivyWikiIndex,
     ) -> HashMap<String, HashMap<String, f32>> {
         let mut entities: HashMap<String, HashMap<String, f32>> = HashMap::new();
-        for ngram in self
-            .query
-            .split_ngrams()
-            .into_iter()
-            .filter(|ngram| !STOPWORDS_EN.contains(ngram))
-        {
+        for ngram in self.query.split_ngrams().into_iter().filter(|ngram| {
+            ngram.split(' ').any(|tok| !STOPWORDS_EN.contains(&tok))
+            // !STOPWORDS_EN.contains(ngram)
+        }) {
             let w_count = ngram.matches(' ').count() + 1;
             // TODO: this should be configurable.
             if w_count == 1 || w_count > 6 {
@@ -133,7 +131,7 @@ impl TagMeQuery {
             // threshold was only in the TAGME source; needs tuning.
             entities.insert(ngram.to_owned(), mention.get_wiki_matches(0.001));
         }
-        println!("entities: {:?}", entities);
+        trace!("entities: {:?}", entities);
         // filters containment mentions (based on paper)
         // sorts by mention length
         let mut sorted_mentions = entities.keys().cloned().collect::<Vec<_>>();
@@ -168,37 +166,51 @@ impl TagMeQuery {
     }
 
     /// vote_e = sum_e_i(mw_rel(e, e_i) * cmn(e_i)) / i
-    fn get_vote(&mut self, wiki_index: &TantivyWikiIndex, entity: &str, men_cand_ens: &HashMap<String, f32>) -> f32 {
-        println!("get_vote({}, {:?})", entity, men_cand_ens);
+    fn get_vote(
+        &mut self,
+        wiki_index: &TantivyWikiIndex,
+        entity: &str,
+        men_cand_ens: &HashMap<String, f32>,
+    ) -> f32 {
+        trace!("get_vote({}, {:?})", entity, men_cand_ens);
         let mut vote: f32 = 0.0;
         for (e_i, cmn) in men_cand_ens.iter() {
             let mw_rel = self.get_mw_rel(wiki_index, entity, e_i);
-            // print(f"\t{e_i} cmn:{cmn} mw_rel:{mw_rel}")
+            trace!("\t{} cmn:{} mw_rel:{}", e_i, cmn, mw_rel);
             vote += cmn * mw_rel;
         }
         let vote: f32 = (vote as f32) / (men_cand_ens.len() as f32);
-        println!("vote for {} -> {}", entity, vote);
+        trace!("vote for {} -> {}", entity, vote);
         vote
     }
 
     /// Performs disambiguation and link each mention to a single entity.
-    pub fn disambiguate(&mut self, wiki_index: &TantivyWikiIndex, candidate_entities: &HashMap<String, HashMap<String, f32>>) -> HashMap<String, String> {
+    pub fn disambiguate(
+        &mut self,
+        wiki_index: &TantivyWikiIndex,
+        candidate_entities: &HashMap<String, HashMap<String, f32>>,
+    ) -> HashMap<String, String> {
         let mut rel_scores: HashMap<String, HashMap<String, f32>> = Default::default();
         for mention_i in candidate_entities.keys() {
             rel_scores.insert(mention_i.to_string(), HashMap::default());
             for entity_mention_i in candidate_entities.get(mention_i).unwrap().keys() {
-                let vote_sum = candidate_entities.keys()
-                    .fold(0.0f32, |acc, mention_j| {
-                        if mention_i == mention_j {
-                            return acc;
-                        }
-                        acc + self.get_vote(wiki_index, entity_mention_i, &candidate_entities.get(mention_j).unwrap())
-                    });
-                rel_scores.get_mut(mention_i).unwrap()
+                let vote_sum = candidate_entities.keys().fold(0.0f32, |acc, mention_j| {
+                    if mention_i == mention_j {
+                        return acc;
+                    }
+                    acc + self.get_vote(
+                        wiki_index,
+                        entity_mention_i,
+                        &candidate_entities.get(mention_j).unwrap(),
+                    )
+                });
+                rel_scores
+                    .get_mut(mention_i)
+                    .unwrap()
                     .insert(entity_mention_i.to_string(), vote_sum);
             }
         }
-        println!("rel_scores: {:?}", rel_scores);
+        trace!("rel_scores: {:?}", rel_scores);
 
         // pruning uncommon entities (based on the paper)
         for mention_i in rel_scores.keys() {
@@ -208,21 +220,24 @@ impl TagMeQuery {
                     self.rel_scores
                         .entry(mention_i.to_string())
                         .or_insert_with(Default::default)
-                        .insert(entity_mention_i.to_string(), rel_scores[mention_i][entity_mention_i]);
+                        .insert(
+                            entity_mention_i.to_string(),
+                            rel_scores[mention_i][entity_mention_i],
+                        );
                 }
             }
         }
 
         // DT pruning
-        let mut disambiguated_entities:  HashMap<String, String> = Default::default();
+        let mut disambiguated_entities: HashMap<String, String> = Default::default();
         for mention_i in self.rel_scores.keys() {
-            println!("evaluating mention {}", mention_i);
+            trace!("evaluating mention {}", mention_i);
             if self.rel_scores[mention_i].len() == 0 {
-                println!("skipping mention {}, score zero", mention_i);
+                trace!("skipping mention {}, score zero", mention_i);
                 continue;
             }
             let top_k_entities = self.get_top_k(mention_i);
-            println!("top_k_entities for {}: {:?}", mention_i, top_k_entities);
+            trace!("top_k_entities for {}: {:?}", mention_i, top_k_entities);
             let mut best_cmn = 0.0f32;
             let mut best_en: Option<&str> = None;
             for entity in top_k_entities {
@@ -236,7 +251,10 @@ impl TagMeQuery {
                     best_cmn = *cmn;
                 }
             }
-            disambiguated_entities.insert(mention_i.to_string(), best_en.unwrap_or("[-ERROR-]").to_string());
+            disambiguated_entities.insert(
+                mention_i.to_string(),
+                best_en.unwrap_or("[-ERROR-]").to_string(),
+            );
         }
         disambiguated_entities
     }
@@ -263,6 +281,7 @@ impl TagMeQuery {
             self.get_in_links(&wiki_index, &[e0]),
             self.get_in_links(&wiki_index, &[e1]),
         ];
+        // trace!("ens_in_links({}, {}): {:?}", e0, e1, ens_in_links);
         let (min, max) = if ens_in_links[0] > ens_in_links[1] {
             (ens_in_links[1] as f32, ens_in_links[0] as f32)
         } else {
@@ -292,16 +311,17 @@ impl TagMeQuery {
         if let Some(values) = self.in_links.get(&uri_hash) {
             return *values;
         }
-        let en_uris = en_uris.iter()
+        let en_uris = en_uris
+            .iter()
             // FIXME: for some reason pages were loaded in lowercase?
             .map(|v| v.replace(" ", "_").to_lowercase())
             .collect::<HashSet<String>>()
             .into_iter()
             .collect::<Vec<_>>();
 
-        println!("get_in_links(..., {:?}) :: {}", en_uris, uri_hash);
+        // trace!("get_in_links(..., {:?}) :: {}", en_uris, uri_hash);
         let values = wiki_index.count_mutual_outlinks(&en_uris);
-        println!("values: {}", values);
+        // trace!("values: {}", values);
         self.in_links.insert(uri_hash, values);
         values
     }
@@ -329,25 +349,28 @@ impl TagMeQuery {
 
     /// Return the top K percent of entities based on relevance score.
     fn get_top_k(&self, mention: &str) -> Vec<&str> {
+        let mention_scores = &self.rel_scores[mention];
+        let mention_scores_count = mention_scores.len();
+        if mention_scores_count == 1 {
+            return mention_scores
+                .keys()
+                .map(|k| k.as_str())
+                .collect::<Vec<&str>>();
+        }
         let k: usize = {
-            let k = (self.rel_scores.get(mention).unwrap().len() as f32) * self.params.k_th;
-            if k == 0.0 {
-                1
-            } else {
-                k as usize
-            }
+            let k = ((mention_scores_count as f32) * self.params.k_th).round() as usize;
+            k.min(1)
         };
-        let mut sorted_scores: Vec<(&str, &f32)> = self.rel_scores[mention]
+
+        let mut sorted_scores: Vec<(&str, &f32)> = mention_scores
             .iter()
             .map(|(s, v)| (s.as_str(), v))
             .collect();
-        println!("sorted scores for {}: {:?}", mention, sorted_scores);
-        sorted_scores.sort_by(|(_, score0), (_, score1)| {
-            score1.partial_cmp(score0).unwrap()
-        });
+
+        sorted_scores.sort_by(|(_, score0), (_, score1)| score1.partial_cmp(score0).unwrap());
         let mut top_k_ens = vec![];
         let mut count = 1;
-        
+
         let mut prev_rel_score = sorted_scores[0].1;
         for (en, rel_score) in sorted_scores {
             if rel_score != prev_rel_score {
