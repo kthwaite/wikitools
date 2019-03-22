@@ -146,20 +146,34 @@ impl TantivyWikiIndex {
         self.reader.searcher().search(&*query, &Count).unwrap()
     }
 
-    pub fn count_mutual_outlinks(&self, query: &[&str]) -> usize {
-        let terms = query
+    pub fn count_mutual_outlinks<S: AsRef<str>>(&self, query: &[S]) -> usize {
+        // let terms: Vec<(Occur, Box<Query>)> = query
+        //     .iter()
+        //     .map(|term| Term::from_field_text(self.outlinks, term.as_ref()))
+        //     .map(|term| {
+        //         (
+        //             Occur::Must,
+        //             Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
+        //                 as Box<dyn Query>
+        //         )
+        //     })
+        //     .collect();
+        // let query = BooleanQuery::from(terms);
+        let query = query
             .iter()
-            .map(|term| Term::from_field_text(self.outlinks, term))
-            .map(|term| {
-                let term_query: Box<Query> =
-                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs));
-                (Occur::Must, term_query)
-            })
-            .collect::<Vec<_>>();
-        let query = BooleanQuery::from(terms);
-        self.reader.searcher().search(&query, &Count).unwrap()
+            .map(|t| t.as_ref())
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let query = self.out_link_parser.parse_query(&query).unwrap();
+        self.index
+            .reader()
+            .unwrap()
+            .searcher()
+            .search(&query, &Count)
+            .unwrap()
     }
 }
+
                 TermQuery::new(
                     Term::from_field_text(self.outlinks, term),
                     IndexRecordOption::Basic,
