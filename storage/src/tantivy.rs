@@ -190,14 +190,98 @@ impl TantivyWikiIndex {
     }
 }
 
-                TermQuery::new(
-                    Term::from_field_text(self.outlinks, term),
-                    IndexRecordOption::Basic,
-                );
-            })
-            .collect::<Vec<_>>();
-        let query = BooleanQuery::new_multiterms_query(terms);
-        self.search(&*query, &Count).unwrap()
+#[cfg(test)]
+mod test {
+    use super::*;
+    use tantivy::{
+        query::{BooleanQuery, Occur, Query, TermQuery},
+        Term,
+    };
+
+    fn create_ram_index(schema: &Schema) -> (Index, IndexWriter) {
+        let index = Index::create_in_ram(schema.clone());
+        let index = TantivyWikiIndex::configure_index(index);
+        let writer = index.writer(10_000_000).unwrap();
+        (index, writer)
     }
-}
+
+    fn get_schema_fields(schema: &Schema) -> (Field, Field, Field, Field) {
+        (
+            schema.get_field("id").unwrap(),
+            schema.get_field("title").unwrap(),
+            schema.get_field("content").unwrap(),
+            schema.get_field("outlinks").unwrap(),
+        )
+    }
+
+    fn as_term_query(field: Field, query: &str) -> Box<dyn Query> {
+        let term = Term::from_field_text(field, query);
+        Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
+    }
+
+    #[test]
+    fn test_build_index_query() {
+        let schema = TantivyWikiIndex::create_schema();
+        let (index, mut writer) = create_ram_index(&schema);
+        let (id, title, content, outlinks) = get_schema_fields(&schema);
+
+        let mut doc = Document::default();
+            doc.add_u64(id, 0);
+            doc.add_text(title, "Spider");
+            doc.add_text(content, "This is a page about spiders.");
+            doc.add_text(outlinks, "Arachnids Insects Famous_Spiders The_Famous_Spiders_(band)");
+        writer.add_document(doc);
+
+        let mut doc = Document::default();
+            doc.add_u64(id, 1);
+            doc.add_text(title, "The_Louvre");
+            doc.add_text(content, "The Louvre is a famous museum run by insects.");
+            doc.add_text(outlinks, "Insects The_Famous_Spiders_(band) Leopold_Poussin");
+        writer.add_document(doc);
+
+        writer.commit().unwrap();
+
+        let reader = index.reader().unwrap();
+        let doc_count = reader.searcher().search(&AllQuery, &Count).unwrap();
+        assert_eq!(doc_count, 2);
+
+        let out_link_parser = QueryParser::for_index(&index, vec![outlinks]);
+
+        // Query parser will mangle this!
+        let query: Box<dyn Query> = as_term_query(outlinks, "Famous_Spiders");
+        let doc_count = reader.searcher().search(&query, &Count).unwrap();
+        assert_eq!(doc_count, 1);
+
+        // No underscores, OK.
+        let query = out_link_parser.parse_query("Insects AND Arachnids").unwrap();
+        let doc_count = reader.searcher().search(&query, &Count).unwrap();
+        assert_eq!(doc_count, 1);
+
+        // Underscores, not OK!
+        let query = out_link_parser.parse_query("Insects AND Famous_Spiders").unwrap();
+        let doc_count = reader.searcher().search(&query, &Count).unwrap();
+        // Tantivy query parser behavioiur changed if this fails.
+        assert_eq!(doc_count, 0);
+
+        let query = BooleanQuery::from(vec![
+            (Occur::Must, as_term_query(outlinks, "Famous_Spiders")),
+            (Occur::Must, as_term_query(outlinks, "Insects"))
+        ]);
+        let doc_count = reader.searcher().search(&query, &Count).unwrap();
+        assert_eq!(doc_count, 1);
+
+        let query = BooleanQuery::from(vec![
+            (Occur::Must, as_term_query(outlinks, "Arachnids")),
+            (Occur::Must, as_term_query(outlinks, "Insects"))
+        ]);
+        let doc_count = reader.searcher().search(&query, &Count).unwrap();
+        assert_eq!(doc_count, 1);
+
+        let query = BooleanQuery::from(vec![
+            (Occur::Must, as_term_query(outlinks, "The_Famous_Spiders_(band)")),
+            (Occur::Must, as_term_query(outlinks, "Insects"))
+        ]);
+        let doc_count = reader.searcher().search(&query, &Count).unwrap();
+        assert_eq!(doc_count, 2);
+    }
 }
