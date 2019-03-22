@@ -11,6 +11,7 @@ use tantivy::{
 
 use crate::page::{anchor::Anchor, PageIterator, TantivyPageIterator};
 use crate::utils::open_seek_bzip;
+use crate::tokenizer::WikiTitleTokenizer;
 
 /// Use tantivy to index content from a bzip2 multistream.
 ///
@@ -111,6 +112,22 @@ impl TantivyWikiIndex {
         }
     }
 
+    /// Load or create an index in the given directory.
+    pub fn load_or_create_index<P: AsRef<Path>>(index_dir: &P) -> Index {
+        let schema = TantivyWikiIndex::create_schema();
+        let index = match MmapDirectory::open(index_dir) {
+            Ok(mmap_dir) => {
+                if Index::exists(&mmap_dir) {
+                    Index::open(mmap_dir).unwrap()
+                } else {
+                    Index::create_in_dir(index_dir, schema).unwrap()
+                }
+            }
+            _ => Index::create_in_dir(index_dir, schema).unwrap(),
+        };
+        index.tokenizers().register("wiki", WikiTitleTokenizer);
+        index
+    }
     /// Create the default schema for wikipedia data.
     ///
     /// ## Fields
