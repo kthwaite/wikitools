@@ -26,6 +26,8 @@ pub struct TagMeParams {
     link_probability_threshold: f32,
     candidate_mention_threshold: f32,
     k_th: f32,
+    ngram_min: usize,
+    ngram_max: usize,
 }
 
 impl Default for TagMeParams {
@@ -34,6 +36,8 @@ impl Default for TagMeParams {
             link_probability_threshold: 0.001,
             candidate_mention_threshold: 0.02,
             k_th: 0.3,
+            ngram_max: 6,
+            ngram_min: 2,
         }
     }
 }
