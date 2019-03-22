@@ -66,3 +66,51 @@ impl<'a> TokenStream for WikiTokenStream<'a> {
         &mut self.token
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_tokenize_one() {
+        let tokz = WikiTitleTokenizer;
+        let mut stream = tokz.token_stream("Nicolas_Poussin");
+        assert_eq!(stream.token().text, "");
+        assert!(stream.advance());
+        assert_eq!(stream.token().text, "Nicolas_Poussin");
+        assert!(!stream.advance());
+    }
+    #[test]
+    fn test_tokenize_two() {
+        let tokz = WikiTitleTokenizer;
+        let mut stream = tokz.token_stream("Nicolas_Poussin The_Louvre");
+        assert_eq!(stream.token().text, "");
+        assert!(stream.advance());
+        assert_eq!(stream.token().text, "Nicolas_Poussin");
+        assert!(stream.advance());
+        assert_eq!(stream.token().text, "The_Louvre");
+        assert!(!stream.advance());
+    }
+
+    #[test]
+    fn test_tokenize_many() {
+        let tokz = WikiTitleTokenizer;
+        let input = &[
+            "Nicolas_Poussin",
+            "The_Louvre",
+            "Orpheus_and_Eurydice",
+            "The_Unattainable_Object_of_Desire",
+            "Paris,_Texas",
+            "The_Louvre_(song)",
+            "Local_Newspaper's_(band)",
+            "Joan_of_Arc",
+        ];
+        let input_str = input.join(" ");
+        let mut stream = tokz.token_stream(&input_str);
+        assert_eq!(stream.token().text, "");    
+        for token in input {
+            assert!(stream.advance());
+            assert_eq!(stream.token().text, *token);
+        }
+        assert!(!stream.advance());
+    }
+}
