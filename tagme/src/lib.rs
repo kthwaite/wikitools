@@ -112,12 +112,13 @@ impl TagMeQuery {
             if w_count == 1 || w_count > 6 {
                 continue;
             }
-            trace!("NGRAM: {}", ngram);
             let mention = map.entities_for_query(ngram).unwrap();
             // TODO: this should be configurable.
             if mention.wiki_occurrences() < 2.0 {
                 continue;
             }
+            trace!("NGRAM: {}", ngram);
+
             let link_probability = self.get_link_probability(&wiki_index, &mention);
             if link_probability < self.params.link_probability_threshold {
                 continue;
@@ -273,6 +274,7 @@ impl TagMeQuery {
     /// - Dexter implementation: https://github.com/dexter/dexter/blob/master/dexter-core/src/main/java/it/cnr/isti/hpc/dexter/relatedness/MilneRelatedness.java
     /// - TAGME: it.acubelab.tagme.preprocessing.graphs.OnTheFlyArrayMeasure
     fn get_mw_rel(&mut self, wiki_index: &TantivyWikiIndex, e0: &str, e1: &str) -> f32 {
+        trace!("\t-- get_mw_rel({}, {})", e0, e1);
         if e0 == e1 {
             return 1.0;
         }
@@ -287,11 +289,13 @@ impl TagMeQuery {
         } else {
             (ens_in_links[0] as f32, ens_in_links[1] as f32)
         };
+        trace!("\t-- min: {} | max: {}", min, max);
 
         if min == 0.0 {
             return 0.0;
         }
         let conj = self.get_in_links(&wiki_index, &[e0, e1]) as f32;
+        trace!("\t-- conj: {}", conj);
         if conj == 0.0 {
             return 0.0;
         }
@@ -313,15 +317,14 @@ impl TagMeQuery {
         }
         let en_uris = en_uris
             .iter()
-            // FIXME: for some reason pages were loaded in lowercase?
-            .map(|v| v.replace(" ", "_").to_lowercase())
+            .map(|v| v.replace(" ", "_"))
             .collect::<HashSet<String>>()
             .into_iter()
             .collect::<Vec<_>>();
 
-        // trace!("get_in_links(..., {:?}) :: {}", en_uris, uri_hash);
+        trace!("\t\tget_in_links(..., {:?}) :: {}", en_uris, uri_hash);
         let values = wiki_index.count_mutual_outlinks(&en_uris);
-        // trace!("values: {}", values);
+        trace!("\t\t== mutual_outlinks: {}", values);
         self.in_links.insert(uri_hash, values);
         values
     }
@@ -368,6 +371,7 @@ impl TagMeQuery {
             .collect();
 
         sorted_scores.sort_by(|(_, score0), (_, score1)| score1.partial_cmp(score0).unwrap());
+        trace!(" -- sorted scores for {}: {:?}", mention, sorted_scores);
         let mut top_k_ens = vec![];
         let mut count = 1;
 
