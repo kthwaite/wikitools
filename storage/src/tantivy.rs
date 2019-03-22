@@ -156,7 +156,7 @@ impl TantivyWikiIndex {
         let options = TextOptions::default().set_indexing_options(
             TextFieldIndexing::default()
                 .set_index_option(IndexRecordOption::WithFreqs)
-                .set_tokenizer("default"),
+                .set_tokenizer("wiki"),
         );
         schema_builder.add_text_field("outlinks", options);
 
