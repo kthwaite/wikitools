@@ -86,10 +86,7 @@ pub struct TantivyWikiIndex {
 impl TantivyWikiIndex {
     /// Open a Tantivy index at the given path.
     pub fn new<P: AsRef<Path>>(index_dir: P) -> Self {
-        let index = {
-            let mmap_dir = MmapDirectory::open(index_dir).unwrap();
-            Index::open(mmap_dir).unwrap()
-        };
+        let index = TantivyWikiIndex::load_index(&index_dir);
 
         let reader = index.reader().unwrap();
         let schema = TantivyWikiIndex::create_schema();
@@ -110,6 +107,16 @@ impl TantivyWikiIndex {
             text_count_parser,
             out_link_parser,
         }
+    }
+
+    /// Load an index from the given directory.
+    pub fn load_index<P: AsRef<Path>>(index_dir: &P) -> Index {
+        let index = {
+            let mmap_dir = MmapDirectory::open(index_dir).unwrap();
+            Index::open(mmap_dir).unwrap()
+        };
+        index.tokenizers().register("wiki", WikiTitleTokenizer);
+        index
     }
 
     /// Load or create an index in the given directory.
