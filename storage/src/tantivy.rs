@@ -171,27 +171,19 @@ impl TantivyWikiIndex {
     }
 
     pub fn count_mutual_outlinks<S: AsRef<str>>(&self, query: &[S]) -> usize {
-        // let terms: Vec<(Occur, Box<Query>)> = query
-        //     .iter()
-        //     .map(|term| Term::from_field_text(self.outlinks, term.as_ref()))
-        //     .map(|term| {
-        //         (
-        //             Occur::Must,
-        //             Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
-        //                 as Box<dyn Query>
-        //         )
-        //     })
-        //     .collect();
-        // let query = BooleanQuery::from(terms);
-        let query = query
+        let terms: Vec<(Occur, Box<Query>)> = query
             .iter()
-            .map(|t| t.as_ref())
-            .collect::<Vec<_>>()
-            .join(" AND ");
-        let query = self.out_link_parser.parse_query(&query).unwrap();
-        self.index
-            .reader()
-            .unwrap()
+            .map(|term| Term::from_field_text(self.outlinks, term.as_ref()))
+            .map(|term| {
+                (
+                    Occur::Must,
+                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
+                        as Box<dyn Query>
+                )
+            })
+            .collect();
+        let query = BooleanQuery::from(terms);
+        self.reader
             .searcher()
             .search(&query, &Count)
             .unwrap()
