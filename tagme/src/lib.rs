@@ -113,7 +113,7 @@ impl TagMeQuery {
         }) {
             let w_count = ngram.matches(' ').count() + 1;
             // TODO: this should be configurable.
-            if w_count == 1 || w_count > 6 {
+            if w_count < self.params.ngram_min || w_count > self.params.ngram_max {
                 continue;
             }
             let mention = map.entities_for_query(ngram).unwrap();
