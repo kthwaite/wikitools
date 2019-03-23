@@ -33,7 +33,7 @@ pub struct TagMeParams {
 impl Default for TagMeParams {
     fn default() -> Self {
         TagMeParams {
-            link_probability_threshold: 0.001,
+            link_probability_threshold: 0.004,
             candidate_mention_threshold: 0.02,
             k_th: 0.3,
             ngram_max: 6,
