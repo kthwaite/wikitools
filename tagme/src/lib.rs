@@ -121,12 +121,12 @@ impl TagMeQuery {
             if mention.wiki_occurrences() < 2.0 {
                 continue;
             }
-            trace!("NGRAM: {}", ngram);
 
             let link_probability = self.get_link_probability(&wiki_index, &mention);
             if link_probability < self.params.link_probability_threshold {
                 continue;
             }
+            trace!("NGRAM: {} (p-link={})", ngram, link_probability);
 
             // These mentions will be kept
             self.link_probabilities
