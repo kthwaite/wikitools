@@ -315,16 +315,17 @@ impl TagMeQuery {
     /// Returns "and" occurrences of entities in the corpus.
     fn get_in_links(&mut self, wiki_index: &TantivyWikiIndex, en_uris: &[&str]) -> usize {
         use std::collections::HashSet;
-        let uri_hash = hash_str_slice(&en_uris);
-        if let Some(values) = self.in_links.get(&uri_hash) {
-            return *values;
-        }
-        let en_uris = en_uris
+        let mut en_uris = en_uris
             .iter()
             .map(|v| v.replace(" ", "_"))
             .collect::<HashSet<String>>()
             .into_iter()
             .collect::<Vec<_>>();
+        en_uris.sort_by(|s0, s1| s0.partial_cmp(s1).unwrap());
+        let uri_hash = hash_str_slice(&en_uris);
+        if let Some(values) = self.in_links.get(&uri_hash) {
+            return *values;
+        }
 
         trace!("\t\tget_in_links(..., {:?}) :: {}", en_uris, uri_hash);
         let values = wiki_index.count_mutual_outlinks(&en_uris);
