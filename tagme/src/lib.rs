@@ -51,7 +51,7 @@ pub struct TagMeQuery {
 
     link_probabilities: HashMap<String, f32>,
     in_links: HashMap<u64, usize>,
-    rel_scores: HashMap<String, HashMap<String, f32>>, // dictionary {men: {en: rel_score, ...}, ...}
+    rel_scores: HashMap<String, HashMap<String, f32>>,
     disamb_ens: HashMap<String, usize>,
 }
 
@@ -79,8 +79,6 @@ impl TagMeQuery {
     ///     and df(m) is the number of articles containing the mention.
     ///
     fn get_link_probability(&self, wiki_index: &TantivyWikiIndex, mention: &SurfaceForm) -> f32 {
-        // pq = ENTITY_INDEX.get_phrase_query(mention.text, Lucene.FIELDNAME_CONTENTS)
-        // mention_freq = ENTITY_INDEX.searcher.search(pq, 1).totalHits
         let mention_freq = wiki_index.count_matches_for_query(&mention.text) as f32;
         trace!("mention freq `{}` == {}", &mention.text, mention_freq);
         if mention_freq == 0.0 {
