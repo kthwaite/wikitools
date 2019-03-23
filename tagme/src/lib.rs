@@ -134,7 +134,7 @@ impl TagMeQuery {
 
             // TODO: according to Faegheh Hasibi's implementation, this
             // threshold was only in the TAGME source; needs tuning.
-            entities.insert(ngram.to_owned(), mention.get_wiki_matches(0.001));
+            entities.insert(ngram.to_owned(), mention.get_wiki_matches(self.params.candidate_mention_threshold));
         }
         trace!("entities: {:?}", entities);
         // filters containment mentions (based on paper)
