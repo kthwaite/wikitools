@@ -81,6 +81,7 @@ pub struct TantivyWikiIndex {
     content: Field,
     text_count_parser: QueryParser,
     out_link_parser: QueryParser,
+    doc_count: usize,
 }
 
 impl TantivyWikiIndex {
@@ -108,6 +109,7 @@ impl TantivyWikiIndex {
             content,
             text_count_parser,
             out_link_parser,
+            doc_count,
         }
     }
 
