@@ -98,6 +98,8 @@ impl TantivyWikiIndex {
         let mut out_link_parser = QueryParser::for_index(&index, vec![outlinks]);
         out_link_parser.set_conjunction_by_default();
 
+        let doc_count = reader.searcher().search(&AllQuery, &Count).unwrap();
+
         TantivyWikiIndex {
             index,
             reader,
@@ -132,9 +134,11 @@ impl TantivyWikiIndex {
             }
             _ => Index::create_in_dir(index_dir, schema).unwrap(),
         };
-        index.tokenizers().register("wiki", WikiTitleTokenizer);
-        index
+    /// Get the number of documents in the index.
+    pub fn len(&self) -> usize {
+        self.doc_count
     }
+
     /// Create the default schema for wikipedia data.
     ///
     /// ## Fields
