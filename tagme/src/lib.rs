@@ -4,12 +4,12 @@ pub mod stopwords;
 
 use crate::query::Query;
 use crate::stopwords::STOPWORDS_EN;
-use log::{debug, info, trace};
+use log::{debug, info, trace, error};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use storage::fst::WikiAnchors;
-use storage::surface_form::SurfaceForm;
+use storage::surface_form::{SurfaceForm, SurfaceFormStoreRead};
 use storage::tantivy::TantivyWikiIndex;
 
 /// Hash an arbitrary slice of str.
@@ -33,7 +33,7 @@ pub struct TagMeParams {
 impl Default for TagMeParams {
     fn default() -> Self {
         TagMeParams {
-            link_probability_threshold: 0.004,
+            link_probability_threshold: 0.001,
             candidate_mention_threshold: 0.02,
             k_th: 0.3,
             ngram_max: 6,
@@ -99,9 +99,9 @@ impl TagMeQuery {
     ///     by another one, TAGME drops the shorter n-gram, if it has lower link
     ///     probability than the longer one. The output of this step is a set of
     ///     mentions with their corresponding candidate entities.
-    pub fn parse(
+    pub fn parse<S: SurfaceFormStoreRead>(
         &mut self,
-        map: &WikiAnchors,
+        map: &S,
         wiki_index: &TantivyWikiIndex,
     ) -> HashMap<String, HashMap<String, f32>> {
         let mut entities: HashMap<String, HashMap<String, f32>> = HashMap::new();
@@ -114,7 +114,14 @@ impl TagMeQuery {
             if w_count < self.params.ngram_min || w_count > self.params.ngram_max {
                 continue;
             }
-            let mention = map.entities_for_query(ngram).unwrap();
+            let mention = match map.get(ngram) {
+                Ok(Some(mention)) => mention,
+                Ok(None) => continue,
+                Err(err) => {
+                    error!("{}", err);
+                    continue
+                },
+            };
             // TODO: this should be configurable.
             if mention.wiki_occurrences() < 2.0 {
                 continue;
@@ -132,7 +139,10 @@ impl TagMeQuery {
 
             // TODO: according to Faegheh Hasibi's implementation, this
             // threshold was only in the TAGME source; needs tuning.
-            entities.insert(ngram.to_owned(), mention.get_wiki_matches(self.params.candidate_mention_threshold));
+            entities.insert(
+                ngram.to_owned(),
+                mention.get_wiki_matches(self.params.candidate_mention_threshold),
+            );
         }
         trace!("entities: {:?}", entities);
         // filters containment mentions (based on paper)
@@ -148,10 +158,9 @@ impl TagMeQuery {
         for i in 0..sorted_mentions.len() {
             let m_i = &sorted_mentions[i];
             let mut ignore_m_i = false;
-            for j in i + 1..sorted_mentions.len() {
-                let m_j = &sorted_mentions[j];
-                if m_j.find(m_i).is_some()
-                    && (self.link_probability_of(m_i) < self.link_probability_of(m_j))
+            for mention_j in sorted_mentions.iter().skip(i + 1) {
+                if mention_j.find(m_i).is_some()
+                    && (self.link_probability_of(m_i) < self.link_probability_of(mention_j))
                 {
                     ignore_m_i = true;
                     break;
@@ -235,7 +244,7 @@ impl TagMeQuery {
         let mut disambiguated_entities: HashMap<String, String> = Default::default();
         for mention_i in self.rel_scores.keys() {
             trace!("evaluating mention {}", mention_i);
-            if self.rel_scores[mention_i].len() == 0 {
+            if self.rel_scores[mention_i].is_empty() {
                 trace!("skipping mention {}, score zero", mention_i);
                 continue;
             }
@@ -380,7 +389,7 @@ impl TagMeQuery {
 
         let mut prev_rel_score = sorted_scores[0].1;
         for (en, rel_score) in sorted_scores {
-            if rel_score != prev_rel_score {
+            if (rel_score - prev_rel_score).abs() > std::f32::EPSILON {
                 count += 1
             }
             if count > k {

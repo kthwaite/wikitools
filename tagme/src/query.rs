@@ -58,7 +58,6 @@ impl Query {
             .collect();
         indices.push(self.query.len());
         (1..indices.len())
-            .into_iter()
             .flat_map(|n| {
                 indices
                     .iter()
