@@ -1,19 +1,19 @@
+use bincode::{deserialize, serialize, Result as BincodeResult};
+use rocksdb::DB as RocksDB;
 use serde::{Deserialize, Serialize};
-use bincode::{serialize, deserialize, Result as BincodeResult};
-use rocksdb::{DB as RocksDB};
 use std::fmt;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct SurfaceForm {
+pub struct SurfaceForm {
     pub key: String,
-    pub anchors: Vec<(String, f32)>
+    pub anchors: Vec<(String, f32)>,
 }
 
 impl SurfaceForm {
     pub fn new(surface_form: &str) -> Self {
         SurfaceForm {
             key: surface_form.to_string(),
-            anchors: vec![]
+            anchors: vec![],
         }
     }
 
@@ -33,17 +33,17 @@ impl SurfaceForm {
         self.key.as_bytes()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> BincodeResult<Self>  {
+    pub fn from_bytes(bytes: &[u8]) -> BincodeResult<Self> {
         deserialize(bytes)
     }
 
-    pub fn to_bytes(&self) -> BincodeResult<Vec<u8>>  {
+    pub fn to_bytes(&self) -> BincodeResult<Vec<u8>> {
         serialize(self)
     }
 }
 
 #[derive(Clone, Debug)]
-enum SurfaceFormError {
+pub enum SurfaceFormError {
     Unknown,
     EncodeError,
     DecodeError,
@@ -64,24 +64,20 @@ impl fmt::Display for SurfaceFormError {
     }
 }
 
-
-trait SurfaceFormStore {
+pub trait SurfaceFormStore {
     fn get(&self, surface_form: &str) -> Result<Option<SurfaceForm>, SurfaceFormError>;
     fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormError>;
 }
 
-struct RocksDBSurfaceFormStore {
-    db: RocksDB
+pub struct RocksDBSurfaceFormStore {
+    db: RocksDB,
 }
 
 impl RocksDBSurfaceFormStore {
     pub fn new(path: &str) -> Result<Self, rocksdb::Error> {
         let db = RocksDB::open_default(path)?;
-        Ok(RocksDBSurfaceFormStore {
-            db,
-        })
+        Ok(RocksDBSurfaceFormStore { db })
     }
-
 }
 
 impl SurfaceFormStore for RocksDBSurfaceFormStore {
@@ -99,15 +95,14 @@ impl SurfaceFormStore for RocksDBSurfaceFormStore {
     fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormError> {
         let value = match surface_form.to_bytes() {
             Ok(value) => value,
-            Err(_err) => return Err(SurfaceFormError::EncodeError)
+            Err(_err) => return Err(SurfaceFormError::EncodeError),
         };
-        match  self.db.put(surface_form.key_bytes(), value) {
+        match self.db.put(surface_form.key_bytes(), value) {
             Ok(()) => Ok(()),
             Err(err) => Err(SurfaceFormError::PutError(format!("{}", err))),
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {
