@@ -88,7 +88,11 @@ impl TantivyWikiIndex {
     /// Open a Tantivy index at the given path.
     pub fn new<P: AsRef<Path>>(index_dir: P) -> Self {
         let index = TantivyWikiIndex::load_index(&index_dir);
+        TantivyWikiIndex::from_index(index)
+    }
 
+    /// Create from an index.
+    pub fn from_index(index: Index) -> Self {
         let reader = index.reader().unwrap();
         let schema = TantivyWikiIndex::create_schema();
 
