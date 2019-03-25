@@ -145,9 +145,11 @@ impl std::convert::From<Box<BincodeError>> for SurfaceFormStoreError {
     }
 }
 
-
-pub trait SurfaceFormStore {
+pub trait SurfaceFormStoreRead {
     fn get(&self, surface_form: &str) -> Result<Option<SurfaceForm>, SurfaceFormStoreError>;
+}
+
+pub trait SurfaceFormStoreWrite {
     fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormStoreError>;
     fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormStoreError>;
     fn put_many(&mut self, surface_form: Vec<SurfaceForm>) -> Result<(), SurfaceFormStoreError>;
