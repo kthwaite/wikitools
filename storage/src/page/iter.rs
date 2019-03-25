@@ -1,4 +1,4 @@
-use crate::page::Page;
+use super::page::Page;
 use quick_xml::{self as qx, events::Event};
 use std::io::{BufReader, Read};
 

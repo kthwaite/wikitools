@@ -1,4 +1,6 @@
-use crate::page::{Anchor, Page};
+use super::anchor::Anchor;
+use super::category::Category;
+use super::page::Page;
 use std::io::{self, Write};
 
 pub trait PageWriter {
