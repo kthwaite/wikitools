@@ -2,7 +2,8 @@
 pub mod fst;
 pub mod page;
 pub mod qpt;
+pub mod rocks;
 pub mod surface_form;
 pub mod tantivy;
-pub mod rocks;
+pub mod tokenizer;
 mod utils;
