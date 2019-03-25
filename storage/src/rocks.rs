@@ -67,6 +67,7 @@ impl fmt::Display for SurfaceFormError {
 pub trait SurfaceFormStore {
     fn get(&self, surface_form: &str) -> Result<Option<SurfaceForm>, SurfaceFormError>;
     fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormError>;
+    fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormError>;
 }
 
 pub struct RocksDBSurfaceFormStore {
@@ -92,6 +93,7 @@ impl SurfaceFormStore for RocksDBSurfaceFormStore {
             Err(_err) => Err(SurfaceFormError::DecodeError),
         }
     }
+
     fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormError> {
         let value = match surface_form.to_bytes() {
             Ok(value) => value,
@@ -101,6 +103,9 @@ impl SurfaceFormStore for RocksDBSurfaceFormStore {
             Ok(()) => Ok(()),
             Err(err) => Err(SurfaceFormError::PutError(format!("{}", err))),
         }
+    }
+    fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormError> {
+        self.put(SurfaceForm::new(surface_form, anchors))
     }
 }
 
