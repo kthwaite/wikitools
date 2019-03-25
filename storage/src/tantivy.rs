@@ -119,6 +119,10 @@ impl TantivyWikiIndex {
             let mmap_dir = MmapDirectory::open(index_dir).unwrap();
             Index::open(mmap_dir).unwrap()
         };
+        TantivyWikiIndex::configure_index(index)
+    }
+
+    pub fn configure_index(index: Index) -> Index {
         index.tokenizers().register("wiki", WikiTitleTokenizer);
         index
     }
@@ -136,6 +140,9 @@ impl TantivyWikiIndex {
             }
             _ => Index::create_in_dir(index_dir, schema).unwrap(),
         };
+        TantivyWikiIndex::configure_index(index)
+    }
+
     /// Get the number of documents in the index.
     pub fn len(&self) -> usize {
         self.doc_count
