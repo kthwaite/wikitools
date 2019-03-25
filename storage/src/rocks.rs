@@ -1,111 +1,86 @@
-use bincode::{deserialize, serialize, Result as BincodeResult};
-use rocksdb::DB as RocksDB;
-use serde::{Deserialize, Serialize};
-use std::fmt;
+use pbr;
+use rayon::prelude::*;
+use rocksdb::{DB as RocksDB, Error as RocksError, WriteBatch};
+use std::sync::Mutex;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct SurfaceForm {
-    pub key: String,
-    pub anchors: Vec<(String, f32)>,
-}
+use super::surface_form::{SurfaceForm, SurfaceFormStore, SurfaceFormStoreError};
 
-impl SurfaceForm {
-    pub fn new(surface_form: &str) -> Self {
-        SurfaceForm {
-            key: surface_form.to_string(),
-            anchors: vec![],
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.anchors.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.anchors.is_empty()
-    }
-
-    pub fn add_anchor(&mut self, page: &str, count: usize) {
-        self.anchors.push((page.to_string(), count as f32))
-    }
-
-    pub fn key_bytes(&self) -> &[u8] {
-        self.key.as_bytes()
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> BincodeResult<Self> {
-        deserialize(bytes)
-    }
-
-    pub fn to_bytes(&self) -> BincodeResult<Vec<u8>> {
-        serialize(self)
+impl std::convert::From<RocksError> for SurfaceFormStoreError {
+    fn from(error: RocksError) -> Self {
+        SurfaceFormStoreError::Generic(error.into_string())
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum SurfaceFormError {
-    Unknown,
-    EncodeError,
-    DecodeError,
-    NoSuchKey,
-    Generic(String),
-    PutError(String),
-    GetError(String),
-}
-impl std::error::Error for SurfaceFormError {}
-impl fmt::Display for SurfaceFormError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self {
-            SurfaceFormError::Generic(err) => write!(f, "Error: {}", err),
-            SurfaceFormError::PutError(err) => write!(f, "Put error: {}", err),
-            SurfaceFormError::GetError(err) => write!(f, "Get error: {}", err),
-            _ => write!(f, "Unknown error"),
-        }
-    }
-}
-
-pub trait SurfaceFormStore {
-    fn get(&self, surface_form: &str) -> Result<Option<SurfaceForm>, SurfaceFormError>;
-    fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormError>;
-    fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormError>;
-}
-
+#[derive(Debug)]
 pub struct RocksDBSurfaceFormStore {
     db: RocksDB,
+    chunk_factor: usize,
 }
 
 impl RocksDBSurfaceFormStore {
     pub fn new(path: &str) -> Result<Self, rocksdb::Error> {
         let db = RocksDB::open_default(path)?;
-        Ok(RocksDBSurfaceFormStore { db })
+        Ok(RocksDBSurfaceFormStore { db, chunk_factor: 20000 })
     }
 }
 
 impl SurfaceFormStore for RocksDBSurfaceFormStore {
-    fn get(&self, key: &str) -> Result<Option<SurfaceForm>, SurfaceFormError> {
-        let value = match self.db.get(key.as_bytes()) {
+    fn get(&self, text: &str) -> Result<Option<SurfaceForm>, SurfaceFormStoreError> {
+        let value = match self.db.get(text.as_bytes()) {
             Ok(Some(value)) => value,
             Ok(None) => return Ok(None),
-            Err(err) => return Err(SurfaceFormError::GetError(format!("{}", err))),
+            Err(err) => return Err(SurfaceFormStoreError::GetError(err.into_string())),
         };
-        match SurfaceForm::from_bytes(&value) {
-            Ok(value) => Ok(Some(value)),
-            Err(_err) => Err(SurfaceFormError::DecodeError),
-        }
+        let value = SurfaceForm::from_bytes(&value)?;
+        Ok(Some(value))
+        // match SurfaceForm::from_bytes(&value) {
+        //     Ok(value) => Ok(Some(value)),
+        //     Err(err) => Err(SurfaceFormStoreError::SerializeError(err)),
+        // }
     }
 
-    fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormError> {
-        let value = match surface_form.to_bytes() {
-            Ok(value) => value,
-            Err(_err) => return Err(SurfaceFormError::EncodeError),
-        };
-        match self.db.put(surface_form.key_bytes(), value) {
+    fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormStoreError> {
+        let value: Vec<u8> = surface_form.to_bytes()?;
+        match self.db.put(surface_form.text_bytes(), value) {
             Ok(()) => Ok(()),
-            Err(err) => Err(SurfaceFormError::PutError(format!("{}", err))),
+            Err(err) => Err(SurfaceFormStoreError::PutError(err.into_string())),
         }
     }
-    fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormError> {
+    fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormStoreError> {
         self.put(&SurfaceForm::new(surface_form, anchors))
+    }
+
+    fn put_many(&mut self, surface_forms: Vec<SurfaceForm>) -> Result<(), SurfaceFormStoreError> {
+        let prog_bar = Mutex::new(pbr::ProgressBar::new((surface_forms.len() / self.chunk_factor) as u64));
+        let lock = Mutex::new(0);
+        let result: Result<Vec<_>, _> = surface_forms
+            .into_par_iter()
+            .chunks(self.chunk_factor)
+            .map(|chunk| -> Result<(), SurfaceFormStoreError> {
+                let mut batch = WriteBatch::default();
+                for surface_form in chunk {
+                    let value: Vec<u8> = surface_form.to_bytes()?;
+                    batch.put(surface_form.text_bytes(), value)?;
+                }
+                {
+                    let _ = lock.lock().unwrap();
+                    self.db.write(batch)?;
+                }
+                {
+                    let mut pbar = prog_bar.lock().unwrap();
+                    pbar.inc();
+                }
+                Ok(())
+            })
+            .collect();
+        result.map(|_| ())
+    }
+
+    fn put_many_raw(&mut self, surface_forms: Vec<(String, Vec<(String, f32)>)>) -> Result<(), SurfaceFormStoreError> {
+        let surface_forms = surface_forms.into_iter()
+            .map(|(surface_form, anchors)| SurfaceForm::from_string(surface_form, anchors))
+            .collect::<Vec<SurfaceForm>>();
+        self.put_many(surface_forms)
     }
 }
 
@@ -114,9 +89,9 @@ mod test {
     use super::*;
     #[test]
     fn serialize_and_deserialize() {
-        let v = SurfaceForm::new("foo");
+        let v = SurfaceForm::new("foo", vec![]);
         let vb = v.to_bytes().unwrap();
         let v2 = SurfaceForm::from_bytes(&vb).unwrap();
-        assert_eq!(v.key, v2.key)
+        assert_eq!(v.text, v2.text)
     }
 }
