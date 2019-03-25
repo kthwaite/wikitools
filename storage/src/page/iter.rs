@@ -1,4 +1,4 @@
-use super::page::Page;
+use super::Page;
 use quick_xml::{self as qx, events::Event};
 use std::io::{BufReader, Read};
 
@@ -175,14 +175,11 @@ impl<R: Read> Iterator for TantivyPageIterator<R> {
                     }
                     _ => (),
                 },
-                Ok(Event::Empty(ref tag)) => match tag.name() {
-                    b"redirect" => {
-                        self.0
-                            .reader
-                            .read_to_end(b"page", &mut self.0.page_buf)
-                            .unwrap();
-                    }
-                    _ => (),
+                Ok(Event::Empty(ref tag)) => if let b"redirect" = tag.name() {
+                    self.0
+                        .reader
+                        .read_to_end(b"page", &mut self.0.page_buf)
+                        .unwrap();
                 },
                 Ok(Event::Eof) => break,
                 Ok(_) => (),

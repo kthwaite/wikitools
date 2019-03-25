@@ -50,7 +50,7 @@ impl Anchor {
     /// slice.
     pub fn pare_anchor_match(page: &str, begin: usize) -> Option<&str> {
         let initial = &page[begin + 2..];
-        if initial.starts_with("#") {
+        if initial.starts_with('#') {
             return None;
         }
         if EXT_LINK.is_match(initial) {
