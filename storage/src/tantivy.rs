@@ -226,17 +226,23 @@ mod test {
         let (id, title, content, outlinks) = get_schema_fields(&schema);
 
         let mut doc = Document::default();
-            doc.add_u64(id, 0);
-            doc.add_text(title, "Spider");
-            doc.add_text(content, "This is a page about spiders.");
-            doc.add_text(outlinks, "Arachnids Insects Famous_Spiders The_Famous_Spiders_(band)");
+        doc.add_u64(id, 0);
+        doc.add_text(title, "Spider");
+        doc.add_text(content, "This is a page about spiders.");
+        doc.add_text(
+            outlinks,
+            "Arachnids Insects Famous_Spiders The_Famous_Spiders_(band)",
+        );
         writer.add_document(doc);
 
         let mut doc = Document::default();
-            doc.add_u64(id, 1);
-            doc.add_text(title, "The_Louvre");
-            doc.add_text(content, "The Louvre is a famous museum run by insects.");
-            doc.add_text(outlinks, "Insects The_Famous_Spiders_(band) Leopold_Poussin");
+        doc.add_u64(id, 1);
+        doc.add_text(title, "The_Louvre");
+        doc.add_text(content, "The Louvre is a famous museum run by insects.");
+        doc.add_text(
+            outlinks,
+            "Insects The_Famous_Spiders_(band) Leopold_Poussin",
+        );
         writer.add_document(doc);
 
         writer.commit().unwrap();
@@ -253,33 +259,40 @@ mod test {
         assert_eq!(doc_count, 1);
 
         // No underscores, OK.
-        let query = out_link_parser.parse_query("Insects AND Arachnids").unwrap();
+        let query = out_link_parser
+            .parse_query("Insects AND Arachnids")
+            .unwrap();
         let doc_count = reader.searcher().search(&query, &Count).unwrap();
         assert_eq!(doc_count, 1);
 
         // Underscores, not OK!
-        let query = out_link_parser.parse_query("Insects AND Famous_Spiders").unwrap();
+        let query = out_link_parser
+            .parse_query("Insects AND Famous_Spiders")
+            .unwrap();
         let doc_count = reader.searcher().search(&query, &Count).unwrap();
         // Tantivy query parser behavioiur changed if this fails.
         assert_eq!(doc_count, 0);
 
         let query = BooleanQuery::from(vec![
             (Occur::Must, as_term_query(outlinks, "Famous_Spiders")),
-            (Occur::Must, as_term_query(outlinks, "Insects"))
+            (Occur::Must, as_term_query(outlinks, "Insects")),
         ]);
         let doc_count = reader.searcher().search(&query, &Count).unwrap();
         assert_eq!(doc_count, 1);
 
         let query = BooleanQuery::from(vec![
             (Occur::Must, as_term_query(outlinks, "Arachnids")),
-            (Occur::Must, as_term_query(outlinks, "Insects"))
+            (Occur::Must, as_term_query(outlinks, "Insects")),
         ]);
         let doc_count = reader.searcher().search(&query, &Count).unwrap();
         assert_eq!(doc_count, 1);
 
         let query = BooleanQuery::from(vec![
-            (Occur::Must, as_term_query(outlinks, "The_Famous_Spiders_(band)")),
-            (Occur::Must, as_term_query(outlinks, "Insects"))
+            (
+                Occur::Must,
+                as_term_query(outlinks, "The_Famous_Spiders_(band)"),
+            ),
+            (Occur::Must, as_term_query(outlinks, "Insects")),
         ]);
         let doc_count = reader.searcher().search(&query, &Count).unwrap();
         assert_eq!(doc_count, 2);
