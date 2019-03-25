@@ -4,4 +4,5 @@ pub mod page;
 pub mod qpt;
 pub mod surface_form;
 pub mod tantivy;
+pub mod rocks;
 mod utils;
