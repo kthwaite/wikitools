@@ -105,7 +105,7 @@ impl SurfaceFormStore for RocksDBSurfaceFormStore {
         }
     }
     fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormError> {
-        self.put(SurfaceForm::new(surface_form, anchors))
+        self.put(&SurfaceForm::new(surface_form, anchors))
     }
 }
 
