@@ -1,14 +1,20 @@
 #![allow(dead_code, unused_imports)]
 use crate::query_text::Query;
-use crate::tag_me::TagMe;
 use crate::stopwords::STOPWORDS_EN;
+use crate::tag_me::TagMe;
+use itertools::Itertools;
 use log::{debug, info, trace, error};
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
+use rayon::prelude::*;
+use std::collections::{
+    HashMap, HashSet,
+    hash_map::DefaultHasher
+};
 use std::hash::{Hash, Hasher};
-use storage::fst::WikiAnchors;
-use storage::surface_form::{SurfaceForm, SurfaceFormStoreRead};
-use storage::tantivy::TantivyWikiIndex;
+use storage::{
+    fst::WikiAnchors,
+    surface_form::{SurfaceForm, SurfaceFormStoreRead},
+    tantivy::TantivyWikiIndex,
+};
 
 /// Hash an arbitrary slice of str.
 fn hash_str_slice<S: AsRef<str> + Hash>(en_uris: &[S]) -> u64 {
@@ -26,7 +32,7 @@ pub struct TagMeQuery {
     rho_th: f32,
 
     link_probabilities: HashMap<String, f32>,
-    in_links: HashMap<u64, usize>,
+    mutual_outlinks: HashMap<u64, usize>,
     rel_scores: HashMap<String, HashMap<String, f32>>,
     disamb_ens: HashMap<String, usize>,
 }
@@ -38,7 +44,7 @@ impl TagMeQuery {
             rho_th,
 
             link_probabilities: HashMap::default(),
-            in_links: HashMap::default(),
+            mutual_outlinks: HashMap::default(),
             rel_scores: HashMap::default(),
             disamb_ens: HashMap::default(),
         }
@@ -55,7 +61,7 @@ impl TagMeQuery {
     ///     by another one, TAGME drops the shorter n-gram, if it has lower link
     ///     probability than the longer one. The output of this step is a set of
     ///     mentions with their corresponding candidate entities.
-    pub fn parse<S: SurfaceFormStoreRead>(
+    pub fn parse<S: SurfaceFormStoreRead + Send + Sync>(
         &mut self,
         tag_me: &TagMe<S>,
     ) -> HashMap<String, HashMap<String, f32>> {
@@ -114,15 +120,39 @@ impl TagMeQuery {
     }
 
     /// Performs disambiguation and link each mention to a single entity.
-    pub fn disambiguate<S: SurfaceFormStoreRead>(
+    pub fn disambiguate<S: SurfaceFormStoreRead + Send + Sync>(
         &mut self,
         tag_me: &TagMe<S>,
         candidate_entities: &HashMap<String, HashMap<String, f32>>,
     ) -> HashMap<String, String> {
         info!("Disambiguating...");
         let mut rel_scores: HashMap<String, HashMap<String, f32>> = Default::default();
+
+        info!("Precaching entity pairs...");
+        let mut all_entities = candidate_entities.values()
+            .flat_map(|map| map.keys())
+            .map(|key| key.replace(" ", "_"))
+            .collect::<HashSet<String>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        info!("Found {} entities...", all_entities.len());
+        all_entities.sort_by(|s0, s1| s0.partial_cmp(s1).unwrap());
+        let all_entities = all_entities.into_iter()
+            .tuple_combinations()
+            .collect::<Vec<_>>();
+        info!("Found {} entity pairs...", all_entities.len());
+
+        let wiki_index = &tag_me.wiki_index;
+        self.mutual_outlinks = all_entities.into_par_iter()
+            .map(|(e0, e1)| {
+                let mutual_outlinks = wiki_index.count_mutual_outlinks(&[e0.as_str(), e1.as_str()]);
+                (hash_str_slice(&[e0, e1]), mutual_outlinks)
+            })
+            .collect();
+        info!("Done!");
+        
         for mention_i in candidate_entities.keys() {
-            info!("Voting on {}", mention_i);
+            trace!("Voting on {}", mention_i);
             rel_scores.insert(mention_i.to_string(), HashMap::default());
             for entity_mention_i in candidate_entities.get(mention_i).unwrap().keys() {
                 let vote_sum = candidate_entities.keys().fold(0.0f32, |acc, mention_j| {
@@ -264,7 +294,6 @@ impl TagMeQuery {
 
     /// Returns "and" occurrences of entities in the corpus.
     fn get_in_links(&mut self, wiki_index: &TantivyWikiIndex, en_uris: &[&str]) -> usize {
-        use std::collections::HashSet;
         let mut en_uris = en_uris
             .iter()
             .map(|v| v.replace(" ", "_"))
@@ -273,19 +302,19 @@ impl TagMeQuery {
             .collect::<Vec<_>>();
         en_uris.sort_by(|s0, s1| s0.partial_cmp(s1).unwrap());
         let uri_hash = hash_str_slice(&en_uris);
-        if let Some(values) = self.in_links.get(&uri_hash) {
+        if let Some(values) = self.mutual_outlinks.get(&uri_hash) {
             return *values;
         }
 
         trace!("\t\tget_in_links(..., {:?}) :: {}", en_uris, uri_hash);
         let values = wiki_index.count_mutual_outlinks(&en_uris);
         trace!("\t\t== mutual_outlinks: {}", values);
-        self.in_links.insert(uri_hash, values);
+        self.mutual_outlinks.insert(uri_hash, values);
         values
     }
 
     /// Return the top K percent of entities based on relevance score.
-    fn get_top_k<S: SurfaceFormStoreRead,>(&self, tag_me: &TagMe<S>, mention: &str) -> Vec<&str> {
+    fn get_top_k<S: SurfaceFormStoreRead + Send + Sync,>(&self, tag_me: &TagMe<S>, mention: &str) -> Vec<&str> {
         let mention_scores = &self.rel_scores[mention];
         tag_me.get_top_k(mention_scores)
     }

@@ -5,18 +5,19 @@ use log::{debug, info, trace, error};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use rayon::prelude::*;
 use storage::fst::WikiAnchors;
 use storage::surface_form::{SurfaceForm, SurfaceFormStoreRead};
 use storage::tantivy::TantivyWikiIndex;
 
 
-pub struct TagMe<S: SurfaceFormStoreRead> {
+pub struct TagMe<S: SurfaceFormStoreRead + Send + Sync> {
     pub params: TagMeParams,
     pub surface_forms: S,
     pub wiki_index: TantivyWikiIndex,
 }
 
-impl<S: SurfaceFormStoreRead> TagMe<S> {
+impl<S: SurfaceFormStoreRead + Send + Sync> TagMe<S> {
     pub fn new(surface_forms: S, wiki_index: TantivyWikiIndex) -> Self {
         TagMe::with_params(Default::default(), surface_forms, wiki_index)
     }
@@ -59,43 +60,54 @@ impl<S: SurfaceFormStoreRead> TagMe<S> {
     pub fn entities_for_query(&self, query: &Query) -> (HashMap<String, HashMap<String, f32>>, HashMap<String, f32>) {
         let mut entities: HashMap<String, HashMap<String, f32>> = Default::default();
         let mut link_probabilities: HashMap<String, f32> = Default::default();
-        for ngram in query.split_ngrams().into_iter().filter(|ngram| {
-            ngram.split(' ').any(|tok| !STOPWORDS_EN.contains(&tok))
-        }) {
-            let w_count = ngram.matches(' ').count() + 1;
-            if w_count < self.params.ngram_min || w_count > self.params.ngram_max {
-                continue;
-            }
-            info!("candidate phrase: {}", ngram);
-            let mention = match self.surface_forms.get(ngram) {
-                Ok(Some(mention)) => mention,
-                Ok(None) => continue,
-                Err(err) => {
-                    error!("{}", err);
-                    continue
-                },
-            };
-            // TODO: this should be configurable.
-            if mention.wiki_occurrences() < 2.0 {
-                continue;
-            }
+        let mentions = query.split_ngrams()
+            .into_iter()
+            .filter(|ngram| {
+                ngram.split(' ').any(|tok| !STOPWORDS_EN.contains(&tok))
+            })
+            .filter(|ngram| {
+                let w_count = ngram.matches(' ').count() + 1;
+                w_count >= self.params.ngram_min && w_count <= self.params.ngram_max
+            })
+            .filter_map(|ngram|{
+                match self.surface_forms.get(ngram) {
+                    Ok(option) => option,
+                    Err(err) => {
+                        error!("{}", err);
+                        None
+                    },
+                }
+            })
+            .filter(|mention| {
+                mention.wiki_occurrences() > 2.0
+            })
+            .collect::<Vec<_>>();
+        info!("Found {} candidate mentions", mentions.len());
+        let mentions = mentions.into_par_iter()
+            .filter_map(|mention| {
+                let link_prob = self.wiki_index.get_link_probability(&mention);
+                if link_prob < self.params.link_probability_threshold {
+                    return None;
+                }
+                Some((mention, link_prob))
+            })
+            .collect::<Vec<_>>();
 
-            let link_probability = self.get_link_probability(&mention);
-            if link_probability < self.params.link_probability_threshold {
-                continue;
-            }
-            trace!("NGRAM: {} (p-link={})", ngram, link_probability);
+        info!("Pruned to {} mentions above link_probability_threshold", mentions.len());
 
-            link_probabilities
-                .insert(ngram.to_string(), link_probability as f32);
-
-            // TODO: according to Faegheh Hasibi's implementation, this
-            // threshold was only in the TAGME source; needs tuning.
-            entities.insert(
-                ngram.to_owned(),
-                mention.get_wiki_matches(self.params.candidate_mention_threshold),
-            );
-        }
+        let link_probabilities = mentions.iter()
+            .map(|(mention, link_prob)| {
+                (mention.text.to_string(), *link_prob as f32)
+            })
+            .collect::<HashMap<String, f32>>();
+        let entities = mentions.iter()
+            .map(|(mention, _)|{
+                (
+                    mention.text.to_string(),
+                    mention.get_wiki_matches(self.params.candidate_mention_threshold),
+                )
+            })
+            .collect::<HashMap<String, HashMap<String, f32>>>();
         (entities, link_probabilities)
     }
 

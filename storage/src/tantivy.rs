@@ -181,11 +181,41 @@ impl TantivyWikiIndex {
         schema_builder.build()
     }
 
-    pub fn count_matches_for_query(&self, query: &str) -> usize {
-        let query = format!(r#""{}""#, query);
-        let query = self.text_count_parser.parse_query(&query).unwrap();
+    /// Get the link probability for the text of a SurfaceForm.
+    ///
+    /// From the paper:
+    ///     For a mention `m` this is calculated as key(m) / df(m), where
+    ///     key(m) denotes number of Wikipedia articles where `m` is
+    ///     selected as a keyword, i.e., linked to an entity (any entity),
+    ///     and df(m) is the number of articles containing the mention.
+    ///
+    pub fn get_link_probability(&self, mention: &SurfaceForm) -> f32 {
+        let mention_freq = self.count_matches_for_query(&mention.text) as f32;
+        trace!("mention freq `{}` == {}", &mention.text, mention_freq);
+        if mention_freq == 0.0 {
+            return 0.0;
+        }
+        let wiki_occurrences = mention.wiki_occurrences();
+        // This is TAGME implementation, from source code:
+        // link_probability = float(wiki_occurrences) / max(mention_freq, wiki_occurrences)
+        let ret = wiki_occurrences / (mention_freq).max(wiki_occurrences);
+        trace!("calculated link prob == {}", ret);
+        ret
+    }
 
-        self.reader.searcher().search(&*query, &Count).unwrap()
+    pub fn count_matches_for_query(&self, query: &str) -> usize {
+        // let query = format!(r#""{}""#, query);
+        // let query = self.text_count_parser.parse_query(&query).unwrap();
+        let mut terms = query.split(' ')
+                 .map(|term| Term::from_field_text(self.content, term))
+                 .collect::<Vec<_>>();
+        if terms.len() == 1 {
+            let query = TermQuery::new(terms.pop().unwrap(), IndexRecordOption::WithFreqsAndPositions);
+            self.reader.searcher().search(&query, &Count).unwrap()
+        } else {
+            let query = PhraseQuery::new(terms);
+            self.reader.searcher().search(&query, &Count).unwrap()
+        }
     }
 
     pub fn count_mutual_outlinks<S: AsRef<str>>(&self, query: &[S]) -> usize {
