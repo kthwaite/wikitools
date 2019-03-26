@@ -6,10 +6,12 @@ use std::sync::Mutex;
 use qp_trie::{wrapper::BString, Trie};
 use rayon::prelude::*;
 
+use core::{
+    bisect::chunk_file,
+    indices::WikiDumpIndices
+};
+use storage::page::anchor::Anchor;
 use crate::extract::index_to_pages;
-use crate::indices::WikiDumpIndices;
-use crate::page::anchor::Anchor;
-use crate::utils::chunk_file;
 
 pub type AnchorCounts = Trie<BString, u32>;
 
@@ -95,6 +97,45 @@ pub fn extract_anchor_counts_from_anchors<P: AsRef<Path>>(
             for (pair, count) in trie {
                 *acc.entry(pair).or_insert(0) += count;
             }
+        }
+        {
+            let mut prog_bar = pbar.lock().unwrap();
+            prog_bar.inc();
+        }
+    });
+    Ok(anchor_counts.into_inner().unwrap())
+}
+
+// Consume an anchor summary file and return a map of surface forms.
+pub fn extract_anchor_counts_from_anchors_nested<P: AsRef<Path> + Send + Sync + Copy>(
+    anchor_file: P,
+    chunk_len: Option<u64>,
+) -> io::Result<Trie<BString, Trie<BString, u32>>> {
+    let anchor_counts: Trie<BString, Trie<BString, u32>> = Trie::new();
+    let anchor_counts = Mutex::new(anchor_counts);
+    let chunk_len = chunk_len.unwrap_or(256 * 1024 * 1024);
+    let chunks = chunk_file(anchor_file, chunk_len)?;
+    let pbar = Mutex::new(pbr::ProgressBar::new(chunks.len() as u64));
+
+    chunks.into_par_iter().for_each(|(start, end)| {
+        let mut file = File::open(anchor_file).unwrap();
+        file.seek(SeekFrom::Start(start)).unwrap();
+        let file = file.take(end - start);
+        let file = BufReader::with_capacity(chunk_len as usize, file);
+        let mut trie: Trie<BString, Trie<BString, u32>> = Trie::new();
+        file.lines().map(|line| line.unwrap()).for_each(|line| {
+            let mut line = line.rsplit('\t');
+            let entity = line.next().unwrap_or("").trim();
+            let surface_form = line.next().unwrap_or("").trim().to_lowercase();
+            *trie
+                .entry(surface_form.into())
+                .or_insert_with(Trie::new)
+                .entry(entity.into())
+                .or_insert(0) += 1;
+        });
+        {
+            let mut acc = anchor_counts.lock().unwrap();
+            acc.extend(trie.into_iter());
         }
         {
             let mut prog_bar = pbar.lock().unwrap();

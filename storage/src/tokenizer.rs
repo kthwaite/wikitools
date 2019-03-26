@@ -1,5 +1,5 @@
-use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 use std::str::CharIndices;
+use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 
 /// Tokenize wiki titles, based on tantivy::tokenizer::SimpleTokenizer.
 #[derive(Clone)]
@@ -23,7 +23,6 @@ impl<'a> Tokenizer<'a> for WikiTitleTokenizer {
     }
 }
 
-
 impl<'a> WikiTokenStream<'a> {
     // search for the end of the current token.
     fn search_token_end(&mut self) -> usize {
@@ -43,6 +42,7 @@ impl<'a> TokenStream for WikiTokenStream<'a> {
         loop {
             match self.chars.next() {
                 Some((offset_from, c)) => {
+                    // TODO: Review wiki title rules and ensure correctness.
                     if c.is_alphanumeric() {
                         let offset_to = self.search_token_end();
                         self.token.offset_from = offset_from;
@@ -106,7 +106,7 @@ mod test {
         ];
         let input_str = input.join(" ");
         let mut stream = tokz.token_stream(&input_str);
-        assert_eq!(stream.token().text, "");    
+        assert_eq!(stream.token().text, "");
         for token in input {
             assert!(stream.advance());
             assert_eq!(stream.token().text, *token);

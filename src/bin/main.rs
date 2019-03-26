@@ -4,18 +4,20 @@ use env_logger;
 use log::{debug, info};
 use std::io;
 
-use wikitools::extract::extract_anchor_counts_to_trie;
-use wikitools::extract::{TrieBuilderFlat, TrieBuilderNested};
-use wikitools::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
-use wikitools::settings::Settings;
-use wikitools::template::compile_templates;
-use wikitools::utils::Timer;
-use wikitools::loaders::{
-    build_or_load_page_indices,
-    build_or_load_template_indices,
+use core::{
+    indices::{
+        read_indices, write_all_indices, write_template_indices, WikiDumpIndices,
+    },
+    settings::Settings,
+    utils::Timer,
 };
+use storage::{
+    template::compile_templates,
+    rocks::RocksDBSurfaceFormStore
+};
+use wikitools::extract::{extract_anchor_counts_to_trie, TrieBuilderFlat, TrieBuilderNested};
+use wikitools::loaders::{build_or_load_page_indices, build_or_load_template_indices};
 
-use bincode;
 use qp_trie::{
     wrapper::{BStr, BString},
     Trie,
@@ -25,51 +27,40 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
-/// Serialize a Trie into a .qpt binary file.
-fn write_to_qpt<V>(
-    anchor_counts: &Trie<BString, V>,
-    path: &Path,
-    buf_size: Option<usize>,
-) -> bincode::Result<()>
-where
-    V: Serialize,
-{
-    let file = File::create(path)?;
-    let buf_size = buf_size.unwrap_or(256 * 1024 * 1024);
-    let file = BufWriter::with_capacity(buf_size, file);
-    bincode::serialize_into(file, &anchor_counts)
-}
+use storage::surface_form::{SurfaceForm, SurfaceFormStoreWrite};
+use pbr;
+use std::sync::Mutex;
+use rayon::prelude::*;
 
-fn read_from_qpt<V>(
-    anchor_counts_flat_path: &Path,
-    buf_size: Option<usize>,
-)  -> bincode::Result<Trie<BString, u32>>
-where
-    V: Serialize,
-{
-    let mut timer = Timer::new();
-    info!("Loading anchor counts...");
-    timer.reset();
-    let file = File::open(anchor_counts_flat_path)?;
-    let buf_size = buf_size.unwrap_or(256 * 1024 * 1024);
-    let reader = BufReader::with_capacity(buf_size, file);
-    let anchor_counts: Trie<BString, u32> = bincode::deserialize_from(reader)?;
-    timer.finish();
-    Ok(anchor_counts)
+use fst::{IntoStreamer, Map, MapBuilder, Streamer};
+use fst_regex::Regex;
+
+
+fn build_rocksdb_from_anchors<P: AsRef<Path>>(anchor_counts: Trie<BString, Trie<BString, u32>>, path: &P) -> Result<(), Box<std::error::Error>> {
+    let mut store = RocksDBSurfaceFormStore::new(&path)?;
+    info!("Converting anchor counts...");
+    let anchor_counts = anchor_counts.into_iter()
+        .map(|(key, values)| (key, values.into_iter().map(|(k, v)| (k.into(), v as f32)).collect::<Vec<(String, f32)>>()))
+        .map(|(key, values)| SurfaceForm::from_string(key.into(), values))
+        .collect::<Vec<_>>();
+    info!("Loading anchor counts into RocksDB backend...");
+    store.put_many(anchor_counts)?;
+    Ok(())
 }
 
 /// Build and serialise a FST from flat anchors.
-fn build_fst_from_anchors(anchor_counts: Trie<BString, u32>, output_path: &Path) -> Result<(), Box<std::error::Error>> {
+fn build_fst_from_anchors(
+    anchor_counts: Trie<BString, u32>,
+    output_path: &Path,
+) -> Result<(), Box<std::error::Error>> {
     let mut timer = Timer::new();
-    
-    use fst::{Map, MapBuilder, IntoStreamer, Streamer};
-    use fst_regex::Regex;
 
     info!("Stripping anchors...");
     timer.reset();
-    let mut anchors = anchor_counts.into_iter()
-                .map(|(key, value)| (key.into(), value as u64))
-                .collect::<Vec<(String, u64)>>();
+    let mut anchors = anchor_counts
+        .into_iter()
+        .map(|(key, value)| (key.into(), value as u64))
+        .collect::<Vec<(String, u64)>>();
     timer.finish();
     info!("Sorting anchors...");
     timer.reset();
@@ -86,7 +77,6 @@ fn build_fst_from_anchors(anchor_counts: Trie<BString, u32>, output_path: &Path)
     timer.finish();
     Ok(())
 }
-
 
 // use crate::extract::AnchorTrieBuilder;
 
@@ -123,13 +113,15 @@ fn main() -> Result<(), Box<std::error::Error>> {
 
     if !settings.anchors.anchor_counts.exists() {
         info!("Building anchor counts...");
-        let anchor_counts = extract_anchor_counts_to_trie(
-            TrieBuilderFlat,
-            &page_indices,
-            &settings.data.dump
-        );
-        info!("Building FST from anchor counts...");
-        build_fst_from_anchors(anchor_counts, &settings.anchors.anchor_counts)?;
+        // let anchor_counts =
+        //     extract_anchor_counts_to_trie(TrieBuilderFlat, &page_indices, &settings.data.dump);
+        // info!("Building FST from anchor counts...");
+        // build_fst_from_anchors(anchor_counts, &settings.anchors.anchor_counts)?;
+
+        let anchor_counts =
+            extract_anchor_counts_to_trie(TrieBuilderNested, &page_indices, &settings.data.dump);
+        let path = Path::new("anchor-counts.db");
+        build_rocksdb_from_anchors(anchor_counts, &path)?;
     }
 
     Ok(())

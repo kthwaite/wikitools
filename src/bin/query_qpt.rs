@@ -1,21 +1,15 @@
+use env_logger;
 use log::info;
 use qp_trie::{
     wrapper::{BStr, BString},
     Trie,
 };
-use std::fs::File;
-use std::time::Instant;
-use std::io::{BufReader};
-use bincode;
-
+use storage::qpt::read_from_qpt;
 
 fn main() -> Result<(), Box<std::error::Error>> {
+    env_logger::init();
     info!("Loading anchor counts...");
-    let start = Instant::now();
-    let file = File::open("anchor-counts-flat.qpt")?;
-    let reader = BufReader::with_capacity(256 * 1024 * 1024, file);
-    let anchor_counts: Trie<BString, u32> = bincode::deserialize_from(reader)?;
-    info!("Done in {} seconds", start.elapsed().as_secs());
+    let anchor_counts: Trie<BString, u32> = read_from_qpt("anchor-counts-flat.qpt", None)?;
 
     info!("Searching for surface form: `EU`...");
     let prefix = AsRef::<BStr>::as_ref("eu\t");

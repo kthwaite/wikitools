@@ -16,6 +16,14 @@ impl Template {
     pub fn clean(title: String, page: String) -> (String, String) {
         (title, page)
     }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn page(&self) -> &str {
+        &self.page
+    }
 }
 
 impl fmt::Display for Template {

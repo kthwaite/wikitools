@@ -8,17 +8,19 @@ use qp_trie::{wrapper::BString, Trie};
 use rayon::prelude::*;
 use serde_json;
 
-use crate::indices::WikiDumpIndices;
-use crate::page::{
+use core::{
+    indices::WikiDumpIndices,
+    multistream::{mutex_bufwriter, open_seek_bzip}
+};
+use storage::redirect::write_redirects;
+use storage::page::{
     writer::{AnchorWriterJSONL, AnchorWriterTSV},
     Anchor, Page, PageIterator, PageWriter, RawPageIterator,
 };
-use crate::redirect::write_redirects;
-use crate::utils::{mutex_bufwriter, open_seek_bzip};
 
 /// Extract a vector of Pages from the zipped store at a given index in a
 /// Wikipedia dump.
-pub fn index_to_pages<P: AsRef<Path>>(data: P, index: &usize) -> Vec<Page> {
+pub fn index_to_pages<P: AsRef<Path> + std::fmt::Debug>(data: P, index: &usize) -> Vec<Page> {
     let store = open_seek_bzip(&data, *index).unwrap();
     PageIterator::new(store).collect::<Vec<_>>()
 }
@@ -78,7 +80,6 @@ pub fn extract_with_writer<P, W>(
     });
 }
 
-
 pub struct TrieBuilderFlat;
 pub struct TrieBuilderNested;
 
@@ -132,7 +133,7 @@ impl AnchorTrieBuilder<u32> for TrieBuilderFlat {
 impl AnchorTrieBuilder<Trie<BString, u32>> for TrieBuilderNested {
     fn fold(into: &mut Trie<BString, Trie<BString, u32>>, from: Trie<BString, Trie<BString, u32>>) {
         for (key, inner) in from {
-            let mut outer = into.entry(key).or_insert_with(Trie::new);
+            let outer = into.entry(key).or_insert_with(Trie::new);
             for (ikey, value) in inner {
                 *outer.entry(ikey).or_insert(0) += value;
             }
@@ -184,11 +185,11 @@ impl AnchorTrieBuilder<Trie<BString, u32>> for TrieBuilderNested {
 pub fn extract_anchor_counts_to_trie<Builder, V>(
     _builder: Builder,
     indices: &WikiDumpIndices,
-    data: &Path
+    data: &Path,
 ) -> Trie<BString, V>
 where
     V: Send + Sync,
-    Builder: AnchorTrieBuilder<V>
+    Builder: AnchorTrieBuilder<V>,
 {
     let mut indices = indices.keys().collect::<Vec<_>>();
     let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
@@ -208,4 +209,46 @@ where
     });
     anchor_counts.into_inner().unwrap()
 }
+
+/// Dump page anchors to a JSONL file.
+pub fn dump_page_anchors_jsonl(
+    page_indices: &WikiDumpIndices,
+    data_dump: &Path,
+    out_path: &Path,
+    buf_size: usize,
+) -> io::Result<()> {
+    let writer = mutex_bufwriter(out_path, buf_size)?;
+
+    extract_with_writer(AnchorWriterJSONL, &page_indices, &data_dump, &writer);
+    Ok(())
+}
+/// Dump a list of redirects to file as tab-separated pairs.
+fn dump_redirects_tsv(
+    page_indices: &WikiDumpIndices,
+    data_dump: &Path,
+    out_path: &Path,
+    buf_size: usize,
+) -> io::Result<()> {
+    let writer = mutex_bufwriter(out_path, buf_size)?;
+    write_redirects(&page_indices, &data_dump, &writer);
+    Ok(())
+}
+
+/// Write anchors from a Wikipedia dump to text file.
+///
+/// # Arguments
+/// * `indices` - Parsed Wikipedia page indices for the corresponding dump
+/// * `dump` - Path to Wikipedia dump
+/// * `out_path` - Output path
+/// * `buf_size` - Buffer size for writer
+pub fn write_anchors_tsv(
+    indices: &WikiDumpIndices,
+    dump: &Path,
+    out_path: &Path,
+    buf_size: usize,
+) -> io::Result<()> {
+    let writer = mutex_bufwriter(out_path, buf_size)?;
+
+    extract_with_writer(AnchorWriterTSV, &indices, &dump, &writer);
+    Ok(())
 }

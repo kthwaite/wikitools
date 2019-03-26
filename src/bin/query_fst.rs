@@ -1,9 +1,8 @@
-use fst::{Map, IntoStreamer};
-use fst_regex::Regex;
 use clap::{App, Arg};
-use std::path::Path;
+use fst::{IntoStreamer, Map};
+use fst_regex::Regex;
 use std::error;
-
+use std::path::Path;
 
 /// Validate path args.
 fn is_path(path: String) -> Result<(), String> {
@@ -12,7 +11,6 @@ fn is_path(path: String) -> Result<(), String> {
     }
     Err(format!("{} is not a valid path", path))
 }
-
 
 /// Fetch the result of one query from the FST.
 fn fetch_one(map: &Map, query: &str) -> Result<(), Box<error::Error>> {
@@ -27,20 +25,19 @@ fn fetch_one(map: &Map, query: &str) -> Result<(), Box<error::Error>> {
     Ok(())
 }
 
-
 fn fetch_interactive() -> Result<(), Box<error::Error>> {
     Ok(())
 }
-
 
 fn main() -> Result<(), Box<error::Error>> {
     let app = App::new("query_fst")
         .about("Run queries over a FST")
         .arg(
-            Arg::with_name("fst_path").index(1)
+            Arg::with_name("fst_path")
+                .index(1)
                 .help("Path to .fst file")
                 .validator(is_path)
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("query")
@@ -48,7 +45,7 @@ fn main() -> Result<(), Box<error::Error>> {
                 .long("query")
                 .takes_value(true)
                 .help("Query to return results for")
-                .required(false)
+                .required(false),
         )
         .get_matches();
 
@@ -56,16 +53,14 @@ fn main() -> Result<(), Box<error::Error>> {
         None => {
             println!("{}", app.usage());
             return Ok(());
-        },
+        }
         Some(fst_path) => fst_path,
     };
 
     println!("Loading {}", fst_path);
     let map = unsafe { Map::from_path(fst_path) }?;
     match app.value_of("query") {
-        Some(query) => {
-            fetch_one(&map, query)
-        },
-        None => fetch_interactive()
+        Some(query) => fetch_one(&map, query),
+        None => fetch_interactive(),
     }
 }

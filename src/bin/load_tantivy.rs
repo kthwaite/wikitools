@@ -2,14 +2,10 @@ use env_logger;
 use log::{debug, info};
 use std::path::Path;
 use std::sync::Mutex;
-use tantivy::{directory::MmapDirectory, schema::*, Index, IndexWriter};
 
-use storage::page::{PageIterator, TantivyPageIterator};
+use core::settings::Settings;
 use storage::tantivy::{index_anchors, TantivyWikiIndex};
 use wikitools::loaders::build_or_load_page_indices;
-use wikitools::settings::Settings;
-use wikitools::utils::open_seek_bzip;
-use storage::tokenizer::WikiTitleTokenizer;
 
 fn main() -> Result<(), Box<std::error::Error>> {
     env_logger::init();
@@ -20,7 +16,6 @@ fn main() -> Result<(), Box<std::error::Error>> {
     debug!("settings: {:#?}", settings);
 
     let indices = build_or_load_page_indices(&settings)?;
-
 
     if !settings.search_index.index_dir.exists() {
         info!(

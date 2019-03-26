@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
@@ -7,11 +6,11 @@ use fnv::FnvHashMap;
 use pbr::ProgressBar;
 use spinners::{Spinner, Spinners};
 
-use crate::utils::open_bzip;
+use crate::multistream::open_bzip;
 
 pub type WikiDumpIndices = FnvHashMap<usize, Vec<usize>>;
 
-/// Find template indices in an index file.
+/// Find the indices of templates index file, returning a WikiDumpIndices map.
 pub fn find_template_indices(path: &Path) -> io::Result<WikiDumpIndices> {
     let buf = open_bzip(path)?;
 
@@ -33,32 +32,6 @@ pub fn find_template_indices(path: &Path) -> io::Result<WikiDumpIndices> {
         pbar.inc();
     }
     Ok(hm)
-}
-
-/// Write (Page ID, Title) pairs from an index file.
-pub fn write_title_pageids<R: BufRead, W: Write>(indices: R, writer: &mut W) -> io::Result<()> {
-    let mut index = 0;
-
-    indices
-        .lines()
-        .map(|line| line.unwrap())
-        .filter_map(|line| {
-            index += 1;
-            if index % 100_000 == 0 {
-                println!("Processed {} indices", index);
-            }
-            if let Some(index) = line.find(':') {
-                let pair = &line[index + 1..];
-                if let Some(index) = pair.find(':') {
-                    let pair = (pair[0..index].to_owned(), pair[index + 1..].to_owned());
-                    return Some(pair);
-                }
-                return None;
-            }
-            None
-        })
-        .for_each(|(index, title)| writeln!(writer, "{}\t{}", index, title).unwrap());
-    Ok(())
 }
 
 /// Build a lookup table of all indices.
@@ -87,7 +60,7 @@ pub fn build_indices_map(path: &Path) -> io::Result<WikiDumpIndices> {
     Ok(hm)
 }
 
-/// Read an indices file.
+/// Read an indices file, returning a WikiDumpIndices object.
 pub fn read_indices(path: &Path) -> io::Result<WikiDumpIndices> {
     let file = File::open(path)?;
     let buf = BufReader::new(file);

@@ -4,14 +4,14 @@ use std::sync::Mutex;
 use tantivy::{
     collector::Count,
     directory::MmapDirectory,
-    query::{BooleanQuery, Occur, Query, QueryParser, TermQuery},
+    query::{AllQuery, BooleanQuery, Occur, Query, QueryParser, TermQuery},
     schema::*,
     Index, IndexReader, IndexWriter, Term,
 };
 
 use crate::page::{anchor::Anchor, PageIterator, TantivyPageIterator};
-use crate::utils::open_seek_bzip;
 use crate::tokenizer::WikiTitleTokenizer;
+use crate::utils::open_seek_bzip;
 
 /// Use tantivy to index content from a bzip2 multistream.
 ///
@@ -164,6 +164,7 @@ impl TantivyWikiIndex {
 
         schema_builder.add_u64_field("id", FAST);
         schema_builder.add_text_field("title", STRING | STORED);
+
         let options = TextOptions::default().set_indexing_options(
             TextFieldIndexing::default()
                 .set_index_option(IndexRecordOption::WithFreqsAndPositions)
@@ -194,16 +195,12 @@ impl TantivyWikiIndex {
             .map(|term| {
                 (
                     Occur::Must,
-                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
-                        as Box<dyn Query>
+                    Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs)) as Box<dyn Query>,
                 )
             })
             .collect();
         let query = BooleanQuery::from(terms);
-        self.reader
-            .searcher()
-            .search(&query, &Count)
-            .unwrap()
+        self.reader.searcher().search(&query, &Count).unwrap()
     }
 }
 

@@ -7,16 +7,16 @@ pub use self::{
     template::Template,
     writer::{FileTemplateWriter, TemplateWriter},
 };
+use pbr::ProgressBar;
+use rayon::prelude::*;
 
 use std::fs::File;
 use std::path::Path;
 use std::sync::Mutex;
 
-use pbr::ProgressBar;
-use rayon::prelude::*;
 
-use crate::indices::WikiDumpIndices;
-use crate::utils::open_seek_bzip;
+use core::indices::WikiDumpIndices;
+use core::multistream::open_seek_bzip;
 
 /// Fetch templates from a Wikipedia dump, writing them to file.
 ///
@@ -53,7 +53,7 @@ pub fn compile_templates(indices: &WikiDumpIndices, data: &Path, output_path: &P
 mod test {
     use super::*;
     use std::cell::RefCell;
-    use std::io::Cursor;
+    use std::io::{self, Cursor};
 
     #[derive(Clone, Debug, Default)]
     struct TestTemplateWriter {
@@ -61,8 +61,9 @@ mod test {
     }
 
     impl TemplateWriter for TestTemplateWriter {
-        fn write_template_impl(&self, template: Template) {
+        fn write_template_impl(&self, template: Template) -> io::Result<()> {
             self.templates.borrow_mut().push(template);
+            Ok(())
         }
     }
 
@@ -92,10 +93,10 @@ mod test {
         let templates = tw.templates.into_inner();
         assert_eq!(templates.len(), 2);
         let template = &templates[0];
-        assert_eq!(template.title, "Template:Test Template");
-        assert_eq!(template.page, "Valid text");
+        assert_eq!(template.title(), "Template:Test Template");
+        assert_eq!(template.page(), "Valid text");
         let template = &templates[1];
-        assert_eq!(template.title, "Template:Second Template");
-        assert_eq!(template.page, "Another set of text");
+        assert_eq!(template.title(), "Template:Second Template");
+        assert_eq!(template.page(), "Another set of text");
     }
 }

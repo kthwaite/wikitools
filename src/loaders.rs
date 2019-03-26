@@ -1,8 +1,9 @@
+use core::{
+    indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices},
+    settings::Settings
+};
+use log::debug;
 use std::io;
-use crate::settings::Settings;
-use log::{debug, info};
-use crate::indices::{read_indices, write_all_indices, write_template_indices, WikiDumpIndices};
-
 
 pub fn build_or_load_page_indices(settings: &Settings) -> io::Result<WikiDumpIndices> {
     if !settings.indices.pages.exists() {

@@ -2,8 +2,14 @@ use pbr;
 use rayon::prelude::*;
 use rocksdb::{DB as RocksDB, Error as RocksError, WriteBatch};
 use std::sync::Mutex;
+use std::path::Path;
 
-use super::surface_form::{SurfaceForm, SurfaceFormStore, SurfaceFormStoreError};
+use super::surface_form::{
+    SurfaceForm,
+    SurfaceFormStoreWrite,
+    SurfaceFormStoreRead,
+    SurfaceFormStoreError
+};
 
 impl std::convert::From<RocksError> for SurfaceFormStoreError {
     fn from(error: RocksError) -> Self {
@@ -18,13 +24,14 @@ pub struct RocksDBSurfaceFormStore {
 }
 
 impl RocksDBSurfaceFormStore {
-    pub fn new(path: &str) -> Result<Self, rocksdb::Error> {
-        let db = RocksDB::open_default(path)?;
+    pub fn new<P: AsRef<Path>>(path: &P) -> Result<Self, rocksdb::Error> {
+        let db = RocksDB::open_default(path.as_ref())?;
         Ok(RocksDBSurfaceFormStore { db, chunk_factor: 20000 })
     }
 }
 
-impl SurfaceFormStore for RocksDBSurfaceFormStore {
+
+impl SurfaceFormStoreRead for RocksDBSurfaceFormStore {
     fn get(&self, text: &str) -> Result<Option<SurfaceForm>, SurfaceFormStoreError> {
         let value = match self.db.get(text.as_bytes()) {
             Ok(Some(value)) => value,
@@ -33,12 +40,10 @@ impl SurfaceFormStore for RocksDBSurfaceFormStore {
         };
         let value = SurfaceForm::from_bytes(&value)?;
         Ok(Some(value))
-        // match SurfaceForm::from_bytes(&value) {
-        //     Ok(value) => Ok(Some(value)),
-        //     Err(err) => Err(SurfaceFormStoreError::SerializeError(err)),
-        // }
     }
+}
 
+impl SurfaceFormStoreWrite for RocksDBSurfaceFormStore {
     fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormStoreError> {
         let value: Vec<u8> = surface_form.to_bytes()?;
         match self.db.put(surface_form.text_bytes(), value) {
@@ -46,6 +51,7 @@ impl SurfaceFormStore for RocksDBSurfaceFormStore {
             Err(err) => Err(SurfaceFormStoreError::PutError(err.into_string())),
         }
     }
+
     fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormStoreError> {
         self.put(&SurfaceForm::new(surface_form, anchors))
     }

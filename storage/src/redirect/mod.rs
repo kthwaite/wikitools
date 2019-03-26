@@ -9,8 +9,8 @@ use quick_xml::{self as qx, events::Event};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::indices::WikiDumpIndices;
-use crate::utils::open_seek_bzip;
+use core::indices::WikiDumpIndices;
+use core::multistream::open_seek_bzip;
 
 /// Check if a Wikipedia page title constitutes a valid redirect.
 /// Wikipedia internal pages, templates, portals and lists are all currently
