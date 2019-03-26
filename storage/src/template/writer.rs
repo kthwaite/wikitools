@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, BufWriter, Stdout, Write};
 use std::sync::Mutex;
 
-use crate::template::Template;
+use super::Template;
 
 pub trait TemplateWriter {
     fn write_template(&self, title: String, page: String) -> io::Result<()> {

@@ -114,7 +114,7 @@ pub fn write_redirects<W: Write + Send + Sync>(
     indices.into_par_iter().for_each(|index| {
         let reader = open_seek_bzip(&data, *index).unwrap();
         let iter = RedirectIterator::new(reader);
-        let reds = iter.into_iter().collect::<Vec<Redirect>>();
+        let reds = iter.collect::<Vec<Redirect>>();
         {
             let mut w = writer.lock().unwrap();
             reds.into_iter().for_each(|red| {

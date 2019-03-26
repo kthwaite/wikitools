@@ -2,7 +2,7 @@ use std::io::BufRead;
 
 use quick_xml as qx;
 
-use crate::template::writer::TemplateWriter;
+use super::writer::TemplateWriter;
 
 /// Extract templates from a stream and pass them to a TemplateWriter.
 pub fn extract_templates<R: BufRead>(stream: R, writer: &TemplateWriter) {

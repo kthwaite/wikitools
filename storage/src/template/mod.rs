@@ -1,22 +1,57 @@
 pub mod extract;
-pub mod template;
 pub mod writer;
 
 pub use self::{
     extract::extract_templates,
-    template::Template,
     writer::{FileTemplateWriter, TemplateWriter},
 };
 use pbr::ProgressBar;
 use rayon::prelude::*;
 
+use std::fmt;
 use std::fs::File;
 use std::path::Path;
 use std::sync::Mutex;
 
-
 use core::indices::WikiDumpIndices;
 use core::multistream::open_seek_bzip;
+
+
+/// Wikipedia Template data.
+#[derive(Clone, Debug, Default)]
+pub struct Template {
+    title: String,
+    page: String,
+}
+
+impl Template {
+    pub fn from_unclean(title: String, page: String) -> Self {
+        let (title, page) = Template::clean(title, page);
+        Template { title, page }
+    }
+
+    pub fn clean(title: String, page: String) -> (String, String) {
+        (title, page)
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn page(&self) -> &str {
+        &self.page
+    }
+}
+
+impl fmt::Display for Template {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "<page>\n   <title>{}</title>\n   <ns>10</ns>\n   <text>{}\n   </text>\n</page>",
+            self.title, self.page
+        )
+    }
+}
 
 /// Fetch templates from a Wikipedia dump, writing them to file.
 ///

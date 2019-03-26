@@ -1,6 +1,10 @@
 use super::anchor::Anchor;
 use super::Page;
 use std::io::{self, Write};
+use std::sync::Mutex;
+use core::indices::WikiDumpIndices;
+use std::path::Path;
+use rayon::prelude::*;
 
 pub trait PageWriter {
     /// Write Page data.
@@ -79,4 +83,34 @@ impl PageWriter for AnchorWriterJSONL {
             page.title, page.id, anchors
         )
     }
+}
+
+
+/// Extract page data and write using the specified PageWriter.
+pub fn extract_with_writer<P, W>(
+    _page_writer: P,
+    indices: &WikiDumpIndices,
+    data: &Path,
+    writer: &Mutex<W>,
+) where
+    P: PageWriter,
+    W: Write + Send + Sync,
+{
+    let mut indices = indices.keys().collect::<Vec<_>>();
+    let pbar = Mutex::new(pbr::ProgressBar::new(indices.len() as u64));
+    indices.sort();
+
+    indices.into_par_iter().for_each(|index| {
+        let pages = Page::index_to_pages(data, *index);
+        {
+            let w = &mut *writer.lock().unwrap();
+            pages.into_iter().for_each(|page| {
+                P::write(page, w).unwrap();
+            });
+        }
+        {
+            let mut prog_bar = pbar.lock().unwrap();
+            prog_bar.inc();
+        }
+    });
 }

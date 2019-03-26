@@ -9,6 +9,8 @@ pub use self::{
     writer::PageWriter,
     category::Category,
 };
+use std::path::Path;
+use core::multistream::open_seek_bzip;
 
 use serde::{Deserialize, Serialize};
 
@@ -73,5 +75,12 @@ impl Page {
             .filter_map(|(begin, _)| Anchor::pare_anchor_match(page, begin))
             .map(Anchor::parse)
             .collect::<Vec<_>>()
+    }
+
+    /// Extract a vector of Pages from the zipped store at a given index in a
+    /// Wikipedia dump.
+    pub fn index_to_pages<P: AsRef<Path> + std::fmt::Debug>(data: P, index: usize) -> Vec<Page> {
+        let store = open_seek_bzip(&data, index).unwrap();
+        PageIterator::new(store).collect::<Vec<_>>()
     }
 }

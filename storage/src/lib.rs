@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#[allow(dead_code)]
 pub mod fst;
 pub mod page;
 pub mod qpt;

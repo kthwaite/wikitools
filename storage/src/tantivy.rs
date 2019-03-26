@@ -4,14 +4,17 @@ use std::sync::Mutex;
 use tantivy::{
     collector::Count,
     directory::MmapDirectory,
-    query::{AllQuery, BooleanQuery, Occur, Query, QueryParser, TermQuery},
+    query::{AllQuery, BooleanQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery},
     schema::*,
     Index, IndexReader, IndexWriter, Term,
+    Result as TantivyResult
 };
+use log::{trace};
 
 use crate::page::{anchor::Anchor, PageIterator, TantivyPageIterator};
 use crate::tokenizer::WikiTitleTokenizer;
-use crate::utils::open_seek_bzip;
+use crate::surface_form::SurfaceForm;
+use core::multistream::open_seek_bzip;
 
 /// Use tantivy to index content from a bzip2 multistream.
 ///
@@ -74,7 +77,7 @@ pub fn index_anchors(
 }
 
 pub struct TantivyWikiIndex {
-    index: Index,
+    pub index: Index,
     reader: IndexReader,
     schema: Schema,
     outlinks: Field,
@@ -86,9 +89,9 @@ pub struct TantivyWikiIndex {
 
 impl TantivyWikiIndex {
     /// Open a Tantivy index at the given path.
-    pub fn new<P: AsRef<Path>>(index_dir: P) -> Self {
-        let index = TantivyWikiIndex::load_index(&index_dir);
-        TantivyWikiIndex::from_index(index)
+    pub fn new<P: AsRef<Path>>(index_dir: P) -> TantivyResult<Self> {
+        let index = TantivyWikiIndex::load_index(&index_dir)?;
+        Ok(TantivyWikiIndex::from_index(index))
     }
 
     /// Create from an index.
@@ -118,12 +121,12 @@ impl TantivyWikiIndex {
     }
 
     /// Load an index from the given directory.
-    pub fn load_index<P: AsRef<Path>>(index_dir: &P) -> Index {
+    pub fn load_index<P: AsRef<Path>>(index_dir: &P) -> TantivyResult<Index> {
         let index = {
-            let mmap_dir = MmapDirectory::open(index_dir).unwrap();
-            Index::open(mmap_dir).unwrap()
+            let mmap_dir = MmapDirectory::open(index_dir)?;
+            Index::open(mmap_dir)?
         };
-        TantivyWikiIndex::configure_index(index)
+        Ok(TantivyWikiIndex::configure_index(index))
     }
 
     pub fn configure_index(index: Index) -> Index {
@@ -150,6 +153,11 @@ impl TantivyWikiIndex {
     /// Get the number of documents in the index.
     pub fn len(&self) -> usize {
         self.doc_count
+    }
+
+    /// Check if there are no documents in the index.
+    pub fn is_empty(&self) -> bool {
+        self.doc_count == 0
     }
 
     /// Create the default schema for wikipedia data.

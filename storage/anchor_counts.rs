@@ -10,8 +10,10 @@ use core::{
     bisect::chunk_file,
     indices::WikiDumpIndices
 };
-use storage::page::anchor::Anchor;
-use crate::extract::index_to_pages;
+use crate::page::{
+    Anchor,
+    Page,
+}; 
 
 pub type AnchorCounts = Trie<BString, u32>;
 
@@ -37,7 +39,7 @@ pub fn extract_anchor_counts(indices: &WikiDumpIndices, data: &Path) -> AnchorCo
     indices
         .into_par_iter()
         .map(|index| {
-            let pages = index_to_pages(data, index);
+            let pages = Page::index_to_pages(data, *index);
             let anchors: AnchorCounts =
                 pages
                     .into_iter()
