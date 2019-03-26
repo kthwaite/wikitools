@@ -61,7 +61,7 @@ impl TagMeQuery {
     ///     by another one, TAGME drops the shorter n-gram, if it has lower link
     ///     probability than the longer one. The output of this step is a set of
     ///     mentions with their corresponding candidate entities.
-    pub fn parse<S: SurfaceFormStoreRead + Send + Sync>(
+    pub fn parse<S: SurfaceFormStoreRead>(
         &mut self,
         tag_me: &TagMe<S>,
     ) -> HashMap<String, HashMap<String, f32>> {
@@ -120,7 +120,7 @@ impl TagMeQuery {
     }
 
     /// Performs disambiguation and link each mention to a single entity.
-    pub fn disambiguate<S: SurfaceFormStoreRead + Send + Sync>(
+    pub fn disambiguate<S: SurfaceFormStoreRead>(
         &mut self,
         tag_me: &TagMe<S>,
         candidate_entities: &HashMap<String, HashMap<String, f32>>,
@@ -222,7 +222,19 @@ impl TagMeQuery {
         disambiguated_entities
     }
 
-    fn prune(&self, _disambiguated_entities: HashMap<String, HashMap<String, f32>>) {}
+    /// Prune entities
+    pub fn prune<S: SurfaceFormStoreRead>(&mut self, tag_me: &TagMe<S>, disambiguated_entities: HashMap<String, String>) -> HashMap<String, (String, f32)> {
+        disambiguated_entities.iter()
+            .filter_map(|(mention, entity)| {
+                let coh_score = self.get_coherence_score(&tag_me.wiki_index, mention, entity, &disambiguated_entities);
+                let rho_score = (self.link_probabilities[mention] + coh_score) / 2.0;
+                if rho_score >= self.rho_th {
+                    return Some((mention.to_string(), (entity.to_string(), rho_score)));
+                }
+                None
+            })
+            .collect()
+    }
 
     fn process(&self) {
         // let candidate_entities = self.parse();
@@ -314,7 +326,7 @@ impl TagMeQuery {
     }
 
     /// Return the top K percent of entities based on relevance score.
-    fn get_top_k<S: SurfaceFormStoreRead + Send + Sync,>(&self, tag_me: &TagMe<S>, mention: &str) -> Vec<&str> {
+    fn get_top_k<S: SurfaceFormStoreRead>(&self, tag_me: &TagMe<S>, mention: &str) -> Vec<&str> {
         let mention_scores = &self.rel_scores[mention];
         tag_me.get_top_k(mention_scores)
     }

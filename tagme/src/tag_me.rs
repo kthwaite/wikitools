@@ -11,13 +11,13 @@ use storage::surface_form::{SurfaceForm, SurfaceFormStoreRead};
 use storage::tantivy::TantivyWikiIndex;
 
 
-pub struct TagMe<S: SurfaceFormStoreRead + Send + Sync> {
+pub struct TagMe<S: SurfaceFormStoreRead> {
     pub params: TagMeParams,
     pub surface_forms: S,
     pub wiki_index: TantivyWikiIndex,
 }
 
-impl<S: SurfaceFormStoreRead + Send + Sync> TagMe<S> {
+impl<S: SurfaceFormStoreRead> TagMe<S> {
     pub fn new(surface_forms: S, wiki_index: TantivyWikiIndex) -> Self {
         TagMe::with_params(Default::default(), surface_forms, wiki_index)
     }
@@ -83,10 +83,12 @@ impl<S: SurfaceFormStoreRead + Send + Sync> TagMe<S> {
             })
             .collect::<Vec<_>>();
         info!("Found {} candidate mentions", mentions.len());
+        let wiki_index = &self.wiki_index;
+        let link_probability_threshold = &self.params.link_probability_threshold;
         let mentions = mentions.into_par_iter()
             .filter_map(|mention| {
-                let link_prob = self.wiki_index.get_link_probability(&mention);
-                if link_prob < self.params.link_probability_threshold {
+                let link_prob = wiki_index.get_link_probability(&mention);
+                if link_prob < *link_probability_threshold {
                     return None;
                 }
                 Some((mention, link_prob))
