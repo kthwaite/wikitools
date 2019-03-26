@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use tantivy::{
     collector::Count,
     directory::MmapDirectory,
-    query::{AllQuery, BooleanQuery, Occur, PhraseQuery, Query, QueryParser, TermQuery},
+    query::{AllQuery, BooleanQuery, Occur, PhraseQuery, Query, TermQuery},
     schema::*,
     Index, IndexReader, IndexWriter, Term,
     Result as TantivyResult
@@ -82,8 +82,6 @@ pub struct TantivyWikiIndex {
     schema: Schema,
     outlinks: Field,
     content: Field,
-    text_count_parser: QueryParser,
-    out_link_parser: QueryParser,
     doc_count: usize,
 }
 
@@ -100,11 +98,7 @@ impl TantivyWikiIndex {
         let schema = TantivyWikiIndex::create_schema();
 
         let content = schema.get_field("content").unwrap();
-        let text_count_parser = QueryParser::for_index(&index, vec![content]);
-
         let outlinks = schema.get_field("outlinks").unwrap();
-        let mut out_link_parser = QueryParser::for_index(&index, vec![outlinks]);
-        out_link_parser.set_conjunction_by_default();
 
         let doc_count = reader.searcher().search(&AllQuery, &Count).unwrap();
 
@@ -114,8 +108,6 @@ impl TantivyWikiIndex {
             schema,
             outlinks,
             content,
-            text_count_parser,
-            out_link_parser,
             doc_count,
         }
     }
