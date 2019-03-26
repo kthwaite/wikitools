@@ -44,8 +44,8 @@ impl Query {
 
     /// Preprocess a query, lowercasing and removing special characters.
     pub fn preprocess(input: &str) -> String {
-        let input = ILLEGAL_CHARS.replace(&input, " ");
-        MULTI_WS.replace(&input, " ").to_lowercase()
+        let input = ILLEGAL_CHARS.replace_all(&input, " ");
+        MULTI_WS.replace_all(&input, " ").to_lowercase()
     }
 
     /// Split the query into constituent n-grams.
