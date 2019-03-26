@@ -282,10 +282,11 @@ impl TagMeQuery {
             .collect()
     }
 
-    fn process(&self) {
-        // let candidate_entities = self.parse();
-        // let disambiguated_entities = self.disambiguate(candidate_entities);
-        // let pruned = self.prune(disambiguated_entities);
+    /// Extract and return entities from the query phrase.
+    fn extract_entities<S: SurfaceFormStoreRead>(&self) -> HashMap<String, String> {
+        let ents = qry.parse(&tag_me);
+        let ents = qry.disambiguate(&tag_me, &ents);
+        qry.prune(&tag_me, ents)
     }
 
     /// coherence_score = sum_e_i(rel(e_i, en)) / len(ens) - 1
