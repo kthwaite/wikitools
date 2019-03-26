@@ -1,15 +1,14 @@
+use super::params::TagMeParams;
 use crate::query_text::Query;
 use crate::stopwords::STOPWORDS_EN;
-use super::params::TagMeParams;
-use log::{debug, info, trace, error};
+use log::{debug, error, info, trace};
+use rayon::prelude::*;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use rayon::prelude::*;
 use storage::fst::WikiAnchors;
 use storage::surface_form::{SurfaceForm, SurfaceFormStoreRead};
 use storage::tantivy::TantivyWikiIndex;
-
 
 pub struct TagMe<S: SurfaceFormStoreRead> {
     pub params: TagMeParams,
@@ -22,7 +21,11 @@ impl<S: SurfaceFormStoreRead> TagMe<S> {
         TagMe::with_params(Default::default(), surface_forms, wiki_index)
     }
 
-    pub fn with_params(params: TagMeParams, surface_forms: S, wiki_index: TantivyWikiIndex) -> Self {
+    pub fn with_params(
+        params: TagMeParams,
+        surface_forms: S,
+        wiki_index: TantivyWikiIndex,
+    ) -> Self {
         TagMe {
             params,
             surface_forms,
@@ -57,35 +60,34 @@ impl<S: SurfaceFormStoreRead> TagMe<S> {
     }
 
     /// Get the entities and corresponding link probabilities for a query
-    pub fn entities_for_query(&self, query: &Query) -> (HashMap<String, HashMap<String, f32>>, HashMap<String, f32>) {
+    pub fn entities_for_query(
+        &self,
+        query: &Query,
+    ) -> (HashMap<String, HashMap<String, f32>>, HashMap<String, f32>) {
         let mut entities: HashMap<String, HashMap<String, f32>> = Default::default();
         let mut link_probabilities: HashMap<String, f32> = Default::default();
-        let mentions = query.split_ngrams()
+        let mentions = query
+            .split_ngrams()
             .into_iter()
-            .filter(|ngram| {
-                ngram.split(' ').any(|tok| !STOPWORDS_EN.contains(&tok))
-            })
+            .filter(|ngram| ngram.split(' ').any(|tok| !STOPWORDS_EN.contains(&tok)))
             .filter(|ngram| {
                 let w_count = ngram.matches(' ').count() + 1;
                 w_count >= self.params.ngram_min && w_count <= self.params.ngram_max
             })
-            .filter_map(|ngram|{
-                match self.surface_forms.get(ngram) {
-                    Ok(option) => option,
-                    Err(err) => {
-                        error!("{}", err);
-                        None
-                    },
+            .filter_map(|ngram| match self.surface_forms.get(ngram) {
+                Ok(option) => option,
+                Err(err) => {
+                    error!("{}", err);
+                    None
                 }
             })
-            .filter(|mention| {
-                mention.wiki_occurrences() > 2.0
-            })
+            .filter(|mention| mention.wiki_occurrences() > 2.0)
             .collect::<Vec<_>>();
         info!("Found {} candidate mentions", mentions.len());
         let wiki_index = &self.wiki_index;
         let link_probability_threshold = &self.params.link_probability_threshold;
-        let mentions = mentions.into_par_iter()
+        let mentions = mentions
+            .into_par_iter()
             .filter_map(|mention| {
                 let link_prob = wiki_index.get_link_probability(&mention);
                 if link_prob < *link_probability_threshold {
@@ -95,15 +97,18 @@ impl<S: SurfaceFormStoreRead> TagMe<S> {
             })
             .collect::<Vec<_>>();
 
-        info!("Pruned to {} mentions above link_probability_threshold", mentions.len());
+        info!(
+            "Pruned to {} mentions above link_probability_threshold",
+            mentions.len()
+        );
 
-        let link_probabilities = mentions.iter()
-            .map(|(mention, link_prob)| {
-                (mention.text.to_string(), *link_prob as f32)
-            })
+        let link_probabilities = mentions
+            .iter()
+            .map(|(mention, link_prob)| (mention.text.to_string(), *link_prob as f32))
             .collect::<HashMap<String, f32>>();
-        let entities = mentions.iter()
-            .map(|(mention, _)|{
+        let entities = mentions
+            .iter()
+            .map(|(mention, _)| {
                 (
                     mention.text.to_string(),
                     mention.get_wiki_matches(self.params.candidate_mention_threshold),
@@ -134,6 +139,7 @@ impl<S: SurfaceFormStoreRead> TagMe<S> {
         sorted_scores.sort_by(|(_, score0), (_, score1)| score1.partial_cmp(score0).unwrap());
         let mut top_k_ens = vec![];
         let mut count = 1;
+        // info!("rel scores: {:?}", sorted_scores);
 
         let mut prev_rel_score = sorted_scores[0].1;
         for (en, rel_score) in sorted_scores {

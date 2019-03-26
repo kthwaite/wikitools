@@ -3,12 +3,9 @@ use crate::query_text::Query;
 use crate::stopwords::STOPWORDS_EN;
 use crate::tag_me::TagMe;
 use itertools::Itertools;
-use log::{debug, info, trace, error};
+use log::{debug, error, info, trace};
 use rayon::prelude::*;
-use std::collections::{
-    HashMap, HashSet,
-    hash_map::DefaultHasher
-};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use storage::{
     fst::WikiAnchors,
@@ -24,7 +21,6 @@ fn hash_str_slice<S: AsRef<str> + Hash>(en_uris: &[S]) -> u64 {
     }
     s.finish()
 }
-
 
 #[derive(Debug)]
 pub struct TagMeQuery {
@@ -119,17 +115,13 @@ impl TagMeQuery {
         vote
     }
 
-    /// Performs disambiguation and link each mention to a single entity.
-    pub fn disambiguate<S: SurfaceFormStoreRead>(
-        &mut self,
+    /// Generate entity-entity scores for a set of candidate entities.
+    fn generate_entity_pairs<S: SurfaceFormStoreRead>(
         tag_me: &TagMe<S>,
         candidate_entities: &HashMap<String, HashMap<String, f32>>,
-    ) -> HashMap<String, String> {
-        info!("Disambiguating...");
-        let mut rel_scores: HashMap<String, HashMap<String, f32>> = Default::default();
-
-        info!("Precaching entity pairs...");
-        let mut all_entities = candidate_entities.values()
+    ) -> HashMap<u64, usize> {
+        let mut all_entities = candidate_entities
+            .values()
             .flat_map(|map| map.keys())
             .map(|key| key.replace(" ", "_"))
             .collect::<HashSet<String>>()
@@ -137,20 +129,29 @@ impl TagMeQuery {
             .collect::<Vec<_>>();
         info!("Found {} entities...", all_entities.len());
         all_entities.sort_by(|s0, s1| s0.partial_cmp(s1).unwrap());
-        let all_entities = all_entities.into_iter()
+        let all_entities = all_entities
+            .into_iter()
             .tuple_combinations()
             .collect::<Vec<_>>();
         info!("Found {} entity pairs...", all_entities.len());
 
         let wiki_index = &tag_me.wiki_index;
-        self.mutual_outlinks = all_entities.into_par_iter()
+        all_entities
+            .into_par_iter()
             .map(|(e0, e1)| {
                 let mutual_outlinks = wiki_index.count_mutual_outlinks(&[e0.as_str(), e1.as_str()]);
                 (hash_str_slice(&[e0, e1]), mutual_outlinks)
             })
-            .collect();
-        info!("Done!");
-        
+            .collect()
+    }
+
+    fn build_initial_votes<S: SurfaceFormStoreRead>(
+        &mut self,
+        tag_me: &TagMe<S>,
+        candidate_entities: &HashMap<String, HashMap<String, f32>>,
+    ) -> HashMap<String, HashMap<String, f32>> {
+        let mut rel_scores: HashMap<String, HashMap<String, f32>> = Default::default();
+
         for mention_i in candidate_entities.keys() {
             trace!("Voting on {}", mention_i);
             rel_scores.insert(mention_i.to_string(), HashMap::default());
@@ -171,15 +172,21 @@ impl TagMeQuery {
                     .insert(entity_mention_i.to_string(), vote_sum);
             }
         }
-        trace!("rel_scores: {:?}", rel_scores);
+        rel_scores
+    }
 
-        // pruning uncommon entities (based on the paper)
-
-        info!("pruning...");
+    /// Populate the list of entity scores, pruning entities below the candidate
+    /// mention threshold
+    fn populate_entity_scores(
+        &mut self,
+        candidate_mention_threshold: f32,
+        candidate_entities: &HashMap<String, HashMap<String, f32>>,
+        rel_scores: HashMap<String, HashMap<String, f32>>,
+    ) {
         for mention_i in rel_scores.keys() {
             for entity_mention_i in rel_scores[mention_i].keys() {
                 let candidate_mention = candidate_entities[mention_i][entity_mention_i];
-                if candidate_mention >= tag_me.params.candidate_mention_threshold {
+                if candidate_mention >= candidate_mention_threshold {
                     self.rel_scores
                         .entry(mention_i.to_string())
                         .or_insert_with(Default::default)
@@ -190,8 +197,15 @@ impl TagMeQuery {
                 }
             }
         }
+    }
 
-        // DT pruning
+    /// Pick the best entity for each mention, returning a map of mentions to
+    /// entities.
+    fn pick_best_entity_for_each_mention<S: SurfaceFormStoreRead>(
+        &mut self,
+        tag_me: &TagMe<S>,
+        candidate_entities: &HashMap<String, HashMap<String, f32>>,
+    ) -> HashMap<String, String> {
         let mut disambiguated_entities: HashMap<String, String> = Default::default();
         for mention_i in self.rel_scores.keys() {
             trace!("evaluating mention {}", mention_i);
@@ -222,11 +236,43 @@ impl TagMeQuery {
         disambiguated_entities
     }
 
+    /// Performs disambiguation, linking each mention to a single entity.
+    pub fn disambiguate<S: SurfaceFormStoreRead>(
+        &mut self,
+        tag_me: &TagMe<S>,
+        candidate_entities: &HashMap<String, HashMap<String, f32>>,
+    ) -> HashMap<String, String> {
+        info!("Disambiguating...");
+
+        info!("Precaching entity pairs...");
+        self.mutual_outlinks = TagMeQuery::generate_entity_pairs(tag_me, candidate_entities);
+        let rel_scores = self.build_initial_votes(tag_me, candidate_entities);
+        trace!("entity votes: {:?}", rel_scores);
+
+        info!("pruning...");
+        self.populate_entity_scores(
+            tag_me.params.candidate_mention_threshold,
+            candidate_entities,
+            rel_scores,
+        );
+        self.pick_best_entity_for_each_mention(tag_me, candidate_entities)
+    }
+
     /// Prune entities
-    pub fn prune<S: SurfaceFormStoreRead>(&mut self, tag_me: &TagMe<S>, disambiguated_entities: HashMap<String, String>) -> HashMap<String, (String, f32)> {
-        disambiguated_entities.iter()
+    pub fn prune<S: SurfaceFormStoreRead>(
+        &mut self,
+        tag_me: &TagMe<S>,
+        disambiguated_entities: HashMap<String, String>,
+    ) -> HashMap<String, (String, f32)> {
+        disambiguated_entities
+            .iter()
             .filter_map(|(mention, entity)| {
-                let coh_score = self.get_coherence_score(&tag_me.wiki_index, mention, entity, &disambiguated_entities);
+                let coh_score = self.get_coherence_score(
+                    &tag_me.wiki_index,
+                    mention,
+                    entity,
+                    &disambiguated_entities,
+                );
                 let rho_score = (self.link_probabilities[mention] + coh_score) / 2.0;
                 if rho_score >= self.rho_th {
                     return Some((mention.to_string(), (entity.to_string(), rho_score)));
@@ -241,7 +287,6 @@ impl TagMeQuery {
         // let disambiguated_entities = self.disambiguate(candidate_entities);
         // let pruned = self.prune(disambiguated_entities);
     }
-
 
     /// coherence_score = sum_e_i(rel(e_i, en)) / len(ens) - 1
     fn get_coherence_score(

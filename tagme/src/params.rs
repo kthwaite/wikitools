@@ -28,22 +28,13 @@ impl TagMeParams {
         }
     }
     pub fn with_k_th(self, k_th: f32) -> Self {
-        TagMeParams {
-            k_th,
-            ..self
-        }
+        TagMeParams { k_th, ..self }
     }
     pub fn with_ngram_min(self, ngram_min: usize) -> Self {
-        TagMeParams {
-            ngram_min,
-            ..self
-        }
+        TagMeParams { ngram_min, ..self }
     }
     pub fn with_ngram_max(self, ngram_max: usize) -> Self {
-        TagMeParams {
-            ngram_max,
-            ..self
-        }
+        TagMeParams { ngram_max, ..self }
     }
 }
 

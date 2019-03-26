@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 lazy_static! {
-    static ref ILLEGAL_CHARS: Regex = Regex::new(r#"[^A-Za-z0-9]+"#).unwrap();
+    static ref ILLEGAL_CHARS: Regex = Regex::new(r#"[^A-Za-z0-9']+"#).unwrap();
     static ref MULTI_WS: Regex = Regex::new(r#"\r|\n|\r\n|\s{2,}"#).unwrap();
 }
 
@@ -74,8 +74,8 @@ mod test {
 
     #[test]
     fn test_query_preprocess() {
-        let query = Query::preprocess("This, IS, teXt");
-        assert_eq!(query, "this is text");
+        let query = Query::preprocess("This's, \"IS\", teXt");
+        assert_eq!(query, "this's is text");
     }
 
     #[test]
