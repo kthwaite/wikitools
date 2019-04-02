@@ -1,3 +1,4 @@
+use log::trace;
 use rayon::prelude::*;
 use std::path::Path;
 use std::sync::Mutex;
@@ -6,14 +7,12 @@ use tantivy::{
     directory::MmapDirectory,
     query::{AllQuery, BooleanQuery, Occur, PhraseQuery, Query, TermQuery},
     schema::*,
-    Index, IndexReader, IndexWriter, Term,
-    Result as TantivyResult
+    Index, IndexReader, IndexWriter, Result as TantivyResult, Term,
 };
-use log::{trace};
 
 use crate::page::{anchor::Anchor, PageIterator, TantivyPageIterator};
-use crate::tokenizer::WikiTitleTokenizer;
 use crate::surface_form::SurfaceForm;
+use crate::tokenizer::WikiTitleTokenizer;
 use core::multistream::open_seek_bzip;
 
 /// Use tantivy to index content from a bzip2 multistream.
@@ -206,11 +205,15 @@ impl TantivyWikiIndex {
     pub fn count_matches_for_query(&self, query: &str) -> usize {
         // let query = format!(r#""{}""#, query);
         // let query = self.text_count_parser.parse_query(&query).unwrap();
-        let mut terms = query.split(' ')
-                 .map(|term| Term::from_field_text(self.content, term))
-                 .collect::<Vec<_>>();
+        let mut terms = query
+            .split(' ')
+            .map(|term| Term::from_field_text(self.content, term))
+            .collect::<Vec<_>>();
         if terms.len() == 1 {
-            let query = TermQuery::new(terms.pop().unwrap(), IndexRecordOption::WithFreqsAndPositions);
+            let query = TermQuery::new(
+                terms.pop().unwrap(),
+                IndexRecordOption::WithFreqsAndPositions,
+            );
             self.reader.searcher().search(&query, &Count).unwrap()
         } else {
             let query = PhraseQuery::new(terms);

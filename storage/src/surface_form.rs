@@ -1,4 +1,4 @@
-use bincode::{deserialize, serialize, Result as BincodeResult, ErrorKind as BincodeError};
+use bincode::{deserialize, serialize, ErrorKind as BincodeError, Result as BincodeResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -93,8 +93,7 @@ impl SurfaceForm {
     /// Fetch entity matches above the given commonness threshold.
     pub fn get_wiki_matches(&self, commonness_threshold: f32) -> HashMap<String, f32> {
         // calculate commonness for each entity and filter the ones below the commonness threshold.
-        self
-            .anchors
+        self.anchors
             .iter()
             .map(|(text, count)| (text, (*count as f32) / self.wiki_occurrences))
             .filter(|(_text, count)| *count >= commonness_threshold)
@@ -151,7 +150,14 @@ pub trait SurfaceFormStoreRead {
 
 pub trait SurfaceFormStoreWrite {
     fn put(&mut self, surface_form: &SurfaceForm) -> Result<(), SurfaceFormStoreError>;
-    fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormStoreError>;
+    fn put_raw(
+        &mut self,
+        surface_form: &str,
+        anchors: Vec<(String, f32)>,
+    ) -> Result<(), SurfaceFormStoreError>;
     fn put_many(&mut self, surface_form: Vec<SurfaceForm>) -> Result<(), SurfaceFormStoreError>;
-    fn put_many_raw(&mut self, surface_forms: Vec<(String, Vec<(String, f32)>)>) -> Result<(), SurfaceFormStoreError>;
+    fn put_many_raw(
+        &mut self,
+        surface_forms: Vec<(String, Vec<(String, f32)>)>,
+    ) -> Result<(), SurfaceFormStoreError>;
 }

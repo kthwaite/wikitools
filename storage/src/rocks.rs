@@ -1,14 +1,11 @@
 use pbr;
 use rayon::prelude::*;
-use rocksdb::{DB as RocksDB, Error as RocksError, WriteBatch};
-use std::sync::Mutex;
+use rocksdb::{Error as RocksError, WriteBatch, DB as RocksDB};
 use std::path::Path;
+use std::sync::Mutex;
 
 use super::surface_form::{
-    SurfaceForm,
-    SurfaceFormStoreWrite,
-    SurfaceFormStoreRead,
-    SurfaceFormStoreError
+    SurfaceForm, SurfaceFormStoreError, SurfaceFormStoreRead, SurfaceFormStoreWrite,
 };
 
 impl std::convert::From<RocksError> for SurfaceFormStoreError {
@@ -26,10 +23,12 @@ pub struct RocksDBSurfaceFormStore {
 impl RocksDBSurfaceFormStore {
     pub fn new<P: AsRef<Path>>(path: &P) -> Result<Self, rocksdb::Error> {
         let db = RocksDB::open_default(path.as_ref())?;
-        Ok(RocksDBSurfaceFormStore { db, chunk_factor: 20000 })
+        Ok(RocksDBSurfaceFormStore {
+            db,
+            chunk_factor: 20000,
+        })
     }
 }
-
 
 impl SurfaceFormStoreRead for RocksDBSurfaceFormStore {
     fn get(&self, text: &str) -> Result<Option<SurfaceForm>, SurfaceFormStoreError> {
@@ -52,12 +51,18 @@ impl SurfaceFormStoreWrite for RocksDBSurfaceFormStore {
         }
     }
 
-    fn put_raw(&mut self, surface_form: &str, anchors: Vec<(String, f32)>) -> Result<(), SurfaceFormStoreError> {
+    fn put_raw(
+        &mut self,
+        surface_form: &str,
+        anchors: Vec<(String, f32)>,
+    ) -> Result<(), SurfaceFormStoreError> {
         self.put(&SurfaceForm::new(surface_form, anchors))
     }
 
     fn put_many(&mut self, surface_forms: Vec<SurfaceForm>) -> Result<(), SurfaceFormStoreError> {
-        let prog_bar = Mutex::new(pbr::ProgressBar::new((surface_forms.len() / self.chunk_factor) as u64));
+        let prog_bar = Mutex::new(pbr::ProgressBar::new(
+            (surface_forms.len() / self.chunk_factor) as u64,
+        ));
         let lock = Mutex::new(0);
         let result: Result<Vec<_>, _> = surface_forms
             .into_par_iter()
@@ -82,13 +87,18 @@ impl SurfaceFormStoreWrite for RocksDBSurfaceFormStore {
         result.map(|_| ())
     }
 
-    fn put_many_raw(&mut self, surface_forms: Vec<(String, Vec<(String, f32)>)>) -> Result<(), SurfaceFormStoreError> {
-        let surface_forms = surface_forms.into_iter()
+    fn put_many_raw(
+        &mut self,
+        surface_forms: Vec<(String, Vec<(String, f32)>)>,
+    ) -> Result<(), SurfaceFormStoreError> {
+        let surface_forms = surface_forms
+            .into_iter()
             .map(|(surface_form, anchors)| SurfaceForm::from_string(surface_form, anchors))
             .collect::<Vec<SurfaceForm>>();
         self.put_many(surface_forms)
     }
 }
+
 
 #[cfg(test)]
 mod test {

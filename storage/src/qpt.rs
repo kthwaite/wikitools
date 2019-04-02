@@ -1,21 +1,14 @@
+use crate::page::{Anchor, PageIterator, RawPageIterator};
 use bincode;
+use core::{indices::WikiDumpIndices, multistream::open_seek_bzip};
 use log::info;
 use qp_trie::{wrapper::BString, Trie};
+use rayon::prelude::*;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
-use std::time::Instant;
 use std::sync::Mutex;
-use crate::page::{
-    PageIterator,
-    RawPageIterator,
-    Anchor
-};
-use core::{
-    indices::WikiDumpIndices,
-    multistream::open_seek_bzip,
-};
-use rayon::prelude::*;
+use std::time::Instant;
 
 pub struct TrieBuilderFlat;
 pub struct TrieBuilderNested;
@@ -146,7 +139,6 @@ where
     });
     anchor_counts.into_inner().unwrap()
 }
-
 
 /// Serialize a Trie into a .qpt binary file.
 pub fn write_to_qpt<P>(

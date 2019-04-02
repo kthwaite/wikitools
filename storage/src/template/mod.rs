@@ -16,7 +16,6 @@ use std::sync::Mutex;
 use core::indices::WikiDumpIndices;
 use core::multistream::open_seek_bzip;
 
-
 /// Wikipedia Template data.
 #[derive(Clone, Debug, Default)]
 pub struct Template {

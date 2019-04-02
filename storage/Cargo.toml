@@ -5,15 +5,14 @@ authors = ["cthwaite <cthwaite@gmail.co.uk>"]
 edition = "2018"
 
 [dependencies]
-aho-corasick = "^0.6"
 bincode = "^1.1"
 bzip2 = "0.3.1"
+core = {path = "../core"}
 env_logger = "^0.6"
 fst = "^0.3"
 fst-regex = "0.2.2"
 lazy_static = "1.1"
 log = "^0.4"
-core = {path = "../core"}
 pbr = "1.0"
 qp-trie = { version = "0.7.3", features = ["serde"] }
 quick-xml = "0.13"
@@ -22,3 +21,6 @@ regex = "1.0"
 rocksdb = "^0.12"
 serde = { version = "1.0", features = ["derive"] }
 tantivy = "^0.9"
+word2vec = "^0.3"
+byteorder = "*"
+lexical = "2.1.0"

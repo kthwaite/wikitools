@@ -7,11 +7,7 @@ use std::io::BufWriter;
 use std::path::Path;
 use std::time::Instant;
 
-use crate::surface_form::{
-    SurfaceForm,
-    SurfaceFormStoreRead,
-    SurfaceFormStoreError,
-};
+use crate::surface_form::{SurfaceForm, SurfaceFormStoreError, SurfaceFormStoreRead};
 
 impl std::convert::From<fst::Error> for SurfaceFormStoreError {
     fn from(error: fst::Error) -> Self {
@@ -71,7 +67,6 @@ impl WikiAnchors {
         Ok(WikiAnchors { anchors })
     }
 }
-
 
 impl SurfaceFormStoreRead for WikiAnchors {
     /// Fetch a map of entity, count for the surface form, if any.

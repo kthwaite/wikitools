@@ -5,15 +5,14 @@ pub mod writer;
 
 pub use self::{
     anchor::Anchor,
+    category::Category,
     iter::{PageIterator, RawPageIterator, TantivyPageIterator},
     writer::PageWriter,
-    category::Category,
 };
-use std::path::Path;
 use core::multistream::open_seek_bzip;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-
 
 /// Collection of Anchors and Categories for a Wikipedia page.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

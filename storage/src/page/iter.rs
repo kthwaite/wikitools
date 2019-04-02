@@ -175,12 +175,14 @@ impl<R: Read> Iterator for TantivyPageIterator<R> {
                     }
                     _ => (),
                 },
-                Ok(Event::Empty(ref tag)) => if let b"redirect" = tag.name() {
-                    self.0
-                        .reader
-                        .read_to_end(b"page", &mut self.0.page_buf)
-                        .unwrap();
-                },
+                Ok(Event::Empty(ref tag)) => {
+                    if let b"redirect" = tag.name() {
+                        self.0
+                            .reader
+                            .read_to_end(b"page", &mut self.0.page_buf)
+                            .unwrap();
+                    }
+                }
                 Ok(Event::Eof) => break,
                 Ok(_) => (),
                 Err(_) => break,
